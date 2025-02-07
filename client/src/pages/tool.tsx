@@ -79,7 +79,7 @@ export default function Tool() {
     if (!results?.tags) return;
 
     const tagText = results.tags
-      .map(({ text }) => `#${text}`)
+      .map(({ text, emoji }) => `${emoji} #${text}`)
       .join(' ');
 
     try {
@@ -229,13 +229,13 @@ export default function Tool() {
 
                   {viewMode === "list" ? (
                     <div className="flex flex-wrap gap-2">
-                      {results.tags.map(({ text, score }, index) => (
+                      {results.tags.map(({ text, score, emoji }, index) => (
                         <div
                           key={index}
                           className={`px-3 py-1.5 rounded-full text-sm font-medium border ${getTagColor(score)} transition-colors duration-200`}
                           title={`Relevance Score: ${score.toFixed(1)}/10`}
                         >
-                          #{text}
+                          {emoji} #{text}
                           <span className="ml-2 px-1.5 py-0.5 rounded-full bg-background/50 text-xs">
                             {score.toFixed(1)}
                           </span>

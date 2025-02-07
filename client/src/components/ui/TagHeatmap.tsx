@@ -31,7 +31,7 @@ export function TagHeatmap({ tags, className }: TagHeatmapProps) {
   return (
     <div className={cn("w-full", className)}>
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
-        {tags.map(({ text, score }, index) => (
+        {tags.map(({ text, score, emoji }, index) => (
           <TooltipProvider key={index}>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -42,7 +42,9 @@ export function TagHeatmap({ tags, className }: TagHeatmapProps) {
                     getTextColor(score)
                   )}
                 >
-                  <div className="text-sm font-medium truncate">#{text}</div>
+                  <div className="text-sm font-medium truncate">
+                    {emoji} #{text}
+                  </div>
                   <div className="text-xs opacity-90 mt-1">
                     Score: {score.toFixed(1)}
                   </div>

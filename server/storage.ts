@@ -2,10 +2,37 @@ import { listings, type Listing, type InsertListing, type ScoredTag } from "@sha
 import { db } from "./db";
 import { eq } from "drizzle-orm";
 
-export interface IStorage {
-  createListing(listing: InsertListing): Promise<Listing>;
-  generateTags(input: InsertListing): Promise<{ tags: ScoredTag[], seoTips: string[] }>;
-}
+// Emoji mappings for different categories and concepts
+const EMOJI_MAPPINGS: Record<string, string[]> = {
+  // Categories
+  "Books": ["📚", "📖", "📕"],
+  "Art": ["🎨", "🖼️", "🎭"],
+  "Clothing": ["👕", "👗", "🧥"],
+  "Home Decor": ["🏠", "🪴", "🛋️"],
+  "Toys": ["🧸", "🎮", "🎲"],
+  "Craft Supplies": ["✂️", "🧶", "🎨"],
+  "Vintage": ["⏰", "📻", "🗝️"],
+
+  // Gift-related
+  "gift": ["🎁", "🎀"],
+  "present": ["🎁", "🎀"],
+  "birthday": ["🎂", "🎈"],
+  "baby": ["👶", "🍼"],
+  "shower": ["🚿", "🎀"],
+
+  // Product features
+  "personalized": ["✨", "💝"],
+  "custom": ["🎯", "✨"],
+  "handmade": ["🤲", "💝"],
+  "unique": ["💫", "⭐"],
+  "creative": ["🎨", "✨"],
+
+  // Specialty
+  "zodiac": ["⭐", "🌟"],
+  "astrology": ["🌙", "⭐"],
+  "celestial": ["✨", "🌙"],
+  "stars": ["⭐", "✨"],
+};
 
 // Marketing-focused keyword database for generating tags
 const KEYWORDS_BY_CATEGORY: Record<string, string[]> = {
@@ -76,6 +103,11 @@ const SPECIALTY_KEYWORDS: Array<[string, number]> = [
   ["stars", 5]
 ];
 
+export interface IStorage {
+  createListing(listing: InsertListing): Promise<Listing>;
+  generateTags(input: InsertListing): Promise<{ tags: ScoredTag[], seoTips: string[] }>;
+}
+
 export class DatabaseStorage implements IStorage {
   async createListing(insertListing: InsertListing): Promise<Listing> {
     const { tags, seoTips } = await this.generateTags(insertListing);
@@ -84,6 +116,19 @@ export class DatabaseStorage implements IStorage {
       .values({ ...insertListing, tags, seoTips })
       .returning();
     return listing;
+  }
+
+  private getEmojiForTag(tag: string, category: string): string {
+    // First try exact matches
+    for (const [key, emojis] of Object.entries(EMOJI_MAPPINGS)) {
+      if (tag.toLowerCase().includes(key.toLowerCase())) {
+        return emojis[Math.floor(Math.random() * emojis.length)];
+      }
+    }
+
+    // If no match found, use category emoji as fallback
+    const categoryEmojis = EMOJI_MAPPINGS[category] || ["✨"];
+    return categoryEmojis[0];
   }
 
   async generateTags(input: InsertListing): Promise<{ tags: ScoredTag[], seoTips: string[] }> {
@@ -100,27 +145,13 @@ export class DatabaseStorage implements IStorage {
     const addScoredTags = (keywords: Array<[string, number]>, categoryBonus = 0) => {
       keywords.forEach(([keyword, baseScore]) => {
         if (containsKeyword(keyword)) {
-          // Calculate final score based on:
-          // 1. Base importance score (1-10)
-          // 2. Category relevance bonus (0-2)
-          // 3. Length bonus for specific phrases (0-1)
-          // 4. Keyword position bonus if in title (0-1)
           let score = baseScore;
-
-          // Add category bonus
           score += categoryBonus;
-
-          // Add length bonus for specific phrases
           score += keyword.split(' ').length > 1 ? 1 : 0;
-
-          // Add title bonus
           if (input.title.toLowerCase().includes(keyword.toLowerCase())) {
             score += 1;
           }
-
-          // Normalize score to 1-10 range
           score = Math.min(10, Math.max(1, score));
-
           tagScores.set(keyword, score);
         }
       });
@@ -130,7 +161,7 @@ export class DatabaseStorage implements IStorage {
     const categoryKeywords = KEYWORDS_BY_CATEGORY[input.category] || [];
     categoryKeywords.forEach(keyword => {
       if (containsKeyword(keyword)) {
-        tagScores.set(keyword, 9); // High base score for category-specific tags
+        tagScores.set(keyword, 9);
       }
     });
 
@@ -153,9 +184,13 @@ export class DatabaseStorage implements IStorage {
       tagScores.set('perfect gift for kids', 9);
     }
 
-    // Convert to array of ScoredTag objects, sort by score, and limit to 13 tags
+    // Convert to array of ScoredTag objects with emojis, sort by score, and limit to 13 tags
     const tags: ScoredTag[] = Array.from(tagScores.entries())
-      .map(([text, score]) => ({ text, score }))
+      .map(([text, score]) => ({
+        text,
+        score,
+        emoji: this.getEmojiForTag(text, input.category)
+      }))
       .sort((a, b) => b.score - a.score)
       .slice(0, 13);
 
