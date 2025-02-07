@@ -30,6 +30,7 @@ import { ColorPalette } from "@/components/ui/ColorPalette";
 import { apiRequest } from "@/lib/queryClient";
 import { Loader2Icon, CopyIcon, CheckIcon, ListIcon, GridIcon } from "lucide-react";
 import { SEO } from "@/components/ui/seo";
+import { WatermarkTool } from "@/components/ui/WatermarkTool";
 
 
 const categories = [
@@ -297,6 +298,7 @@ export default function Tool() {
                   tags={results.tags}
                 />
                 <ColorPalette />
+                <WatermarkTool />
               </div>
             )}
 
