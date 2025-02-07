@@ -26,9 +26,9 @@ import { AdPlacement } from "@/components/ui/AdPlacement";
 import { SEOTips } from "@/components/ui/SEOTips";
 import { TagHeatmap } from "@/components/ui/TagHeatmap";
 import { apiRequest } from "@/lib/queryClient";
-import { Loader2Icon, CopyIcon, CheckIcon, ListIcon, GridIcon, ScrollText } from "lucide-react";
+import { Loader2Icon, CopyIcon, CheckIcon, ListIcon, GridIcon } from "lucide-react";
 import { SEO } from "@/components/ui/seo";
-import { TagCarousel } from '@/components/ui/TagCarousel';
+
 
 const categories = [
   "Jewelry",
@@ -40,7 +40,7 @@ const categories = [
   "Vintage",
 ];
 
-type ViewMode = "list" | "heatmap" | "carousel";
+type ViewMode = "list" | "heatmap";
 
 export default function Tool() {
   const { toast } = useToast();
@@ -82,6 +82,7 @@ export default function Tool() {
     mutation.mutate(data);
   };
 
+  // Helper function to get tag color based on score
   const getTagColor = (score: number) => {
     if (score >= 9) return "bg-primary/20 text-primary border-primary";
     if (score >= 7) return "bg-accent/20 text-accent-foreground border-accent";
@@ -114,7 +115,7 @@ export default function Tool() {
 
   return (
     <>
-      <SEO
+      <SEO 
         title="Generate Etsy Tags - Free SEO Tag Generator Tool"
         description="Create optimized tags for your Etsy listings with our intelligent tag generator. Get relevance scores, emoji suggestions, and SEO tips to improve visibility."
         keywords={[
@@ -220,38 +221,24 @@ export default function Tool() {
                         </p>
                       </div>
                       <div className="flex items-center gap-2">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="flex items-center gap-2"
-                            >
-                              {viewMode === "list" ? (
-                                <ListIcon className="h-4 w-4" />
-                              ) : viewMode === "heatmap" ? (
-                                <GridIcon className="h-4 w-4" />
-                              ) : (
-                                <ScrollText className="h-4 w-4" />
-                              )}
-                              View Mode
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent>
-                            <DropdownMenuItem onClick={() => setViewMode("list")}>
-                              <ListIcon className="h-4 w-4 mr-2" />
-                              List View
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => setViewMode("heatmap")}>
-                              <GridIcon className="h-4 w-4 mr-2" />
-                              Heatmap View
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => setViewMode("carousel")}>
-                              <ScrollText className="h-4 w-4 mr-2" />
-                              Carousel View
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setViewMode(viewMode === "list" ? "heatmap" : "list")}
+                          className="flex items-center gap-2"
+                        >
+                          {viewMode === "list" ? (
+                            <>
+                              <GridIcon className="h-4 w-4" />
+                              Show Heatmap
+                            </>
+                          ) : (
+                            <>
+                              <ListIcon className="h-4 w-4" />
+                              Show List
+                            </>
+                          )}
+                        </Button>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button
@@ -294,10 +281,8 @@ export default function Tool() {
                           </div>
                         ))}
                       </div>
-                    ) : viewMode === "heatmap" ? (
-                      <TagHeatmap tags={results.tags} className="mt-4" />
                     ) : (
-                      <TagCarousel tags={results.tags} className="mt-4" />
+                      <TagHeatmap tags={results.tags} className="mt-4" />
                     )}
                   </CardContent>
                 </Card>
