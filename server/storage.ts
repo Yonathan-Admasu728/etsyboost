@@ -289,7 +289,10 @@ export class DatabaseStorage implements IStorage {
   async createWatermark(insertWatermark: InsertWatermark): Promise<Watermark> {
     const [watermark] = await db
       .insert(watermarks)
-      .values(insertWatermark)
+      .values({
+        ...insertWatermark,
+        createdAt: new Date()
+      })
       .returning();
     return watermark;
   }

@@ -9,6 +9,9 @@ import ffmpeg from "fluent-ffmpeg";
 import { v4 as uuidv4 } from "uuid";
 import path from "path";
 import fs from "fs/promises";
+import { db } from "./db"; // Import db connection
+import { eq } from "drizzle-orm"; // Import drizzle operator
+import { users } from "@shared/schema"; // Import schema from shared
 
 // Ensure uploads directory exists
 const uploadsDir = path.join(process.cwd(), "uploads");
@@ -46,7 +49,8 @@ export function registerRoutes(app: Express): Server {
       }
 
       // Get user and check credits
-      const user = await storage.getUser(1); // TODO: Replace with actual user ID from auth
+      // TODO: Replace with actual user ID from auth
+      const [user] = await db.select().from(users).where(eq(users.email, 'test@example.com'));
       if (!user) {
         return res.status(401).json({ error: "User not found" });
       }
@@ -100,6 +104,19 @@ export function registerRoutes(app: Express): Server {
         if (!user.isPremium) {
           await storage.deductImageCredit(user.id);
         }
+
+        // Store watermark record
+        await storage.createWatermark({
+          type: "image",
+          originalFile: req.file.originalname,
+          watermarkedFile: outputFileName,
+          userId: user.id // Added userId here
+        });
+
+        // Send the watermarked image
+        res.setHeader('Content-Type', fileType.mime);
+        res.setHeader('Content-Disposition', `attachment; filename="watermarked.${fileType.ext}"`);
+        res.send(watermarkedImage);
       } else if (isVideo) {
         // Save temp video file
         const inputPath = path.join(uploadsDir, `input-${outputFileName}`);
@@ -108,23 +125,21 @@ export function registerRoutes(app: Express): Server {
         // Add watermark using ffmpeg
         await new Promise<void>((resolve, reject) => {
           ffmpeg(inputPath)
-            .videoFilters([
-              {
-                filter: 'drawtext',
-                options: {
-                  text: watermarkText,
-                  fontsize: '24',
-                  fontcolor: `white@${opacity}`,
-                  x: position.includes('right') ? 'w-tw-10' : '10',
-                  y: position.includes('bottom') ? 'h-th-10' : '10',
-                  box: '1',
-                  boxcolor: 'black@0.4',
-                  boxborderw: '5',
-                }
+            .videoFilters([{
+              filter: 'drawtext',
+              options: {
+                text: watermarkText,
+                fontsize: '24',
+                fontcolor: `white@${opacity}`,
+                x: position.includes('right') ? 'w-tw-10' : '10',
+                y: position.includes('bottom') ? 'h-th-10' : '10',
+                box: '1',
+                boxcolor: 'black@0.4',
+                boxborderw: '5',
               }
-            ])
+            }])
             .save(outputPath)
-            .on('end', resolve)
+            .on('end', () => resolve())
             .on('error', reject);
         });
 
@@ -135,18 +150,24 @@ export function registerRoutes(app: Express): Server {
         if (!user.isPremium) {
           await storage.deductVideoCredit(user.id);
         }
+
+        // Store watermark record
+        await storage.createWatermark({
+          type: "video",
+          originalFile: req.file.originalname,
+          watermarkedFile: outputFileName,
+          userId: user.id // Added userId here
+        });
+
+        // Send the watermarked video
+        res.setHeader('Content-Type', fileType.mime);
+        res.setHeader('Content-Disposition', `attachment; filename="watermarked.${fileType.ext}"`);
+        const videoBuffer = await fs.readFile(outputPath);
+        res.send(videoBuffer);
+
+        // Clean up output file after sending
+        await fs.unlink(outputPath);
       }
-
-      // Save watermark record
-      await storage.createWatermark({
-        userId: user.id,
-        type: isVideo ? "video" : "image",
-        originalFile: req.file.originalname,
-        watermarkedFile: outputFileName,
-      });
-
-      // Send processed file
-      res.sendFile(outputPath);
     } catch (error) {
       console.error("Watermark error:", error);
       res.status(500).json({ error: "Failed to process watermark" });

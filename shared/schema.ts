@@ -62,6 +62,9 @@ export const insertUserSchema = createInsertSchema(users).pick({
 export const insertWatermarkSchema = createInsertSchema(watermarks).pick({
   type: true,
   originalFile: true,
+  userId: true,
+}).extend({
+  watermarkedFile: z.string(),
 });
 
 // Export types
