@@ -7,29 +7,48 @@ export interface IStorage {
   generateTags(input: InsertListing): Promise<{ tags: string[], seoTips: string[] }>;
 }
 
-// Basic keyword database for generating tags
+// Marketing-focused keyword database for generating tags
 const KEYWORDS_BY_CATEGORY: Record<string, string[]> = {
-  "Jewelry": ["handmade jewelry", "sterling silver", "boho", "vintage", "gift for her", "necklace", "bracelet", "earrings", "jewelry gift"],
-  "Art": ["wall art", "print", "original art", "painting", "digital art", "home decor", "custom art", "artwork", "personalized art", "custom design"],
-  "Books": ["personalized book", "custom story", "children's book", "kids book", "story book", "educational book", "gift for kids"],
-  "Personalized Items": ["personalized gift", "custom made", "made to order", "unique gift", "personalized design", "custom order"],
-  "Clothing": ["handmade clothing", "custom clothing", "personalized clothing", "custom design", "fashion", "apparel", "boutique"],
-  "Home Decor": ["home decor", "wall decor", "custom decor", "personalized decor", "home gift"],
-  "Toys": ["educational toys", "kids toys", "children's gifts", "learning toys", "custom toys"],
-  "Craft Supplies": ["craft supplies", "diy materials", "creative supplies", "art supplies"],
-  "Vintage": ["vintage items", "antique", "retro", "collectible", "vintage finds"]
+  "Books": [
+    "personalized book", "custom story book", "children's book", 
+    "kids story book", "educational book", "unique story book",
+    "personalized story", "custom children's book"
+  ],
+  "Art": [
+    "personalized art", "custom art", "wall art", 
+    "kids room art", "nursery decor", "custom design"
+  ],
+  "Personalized Items": [
+    "personalized gift", "custom gift", "unique gift", 
+    "made to order", "custom made", "personalized keepsake"
+  ]
 };
 
-const GENERAL_KEYWORDS = [
-  "handmade", "custom", "unique", "gift", "personalized", "etsy", 
-  "custom made", "made to order", "one of a kind"
+// Marketing phrases that appeal to buyers
+const MARKETING_PHRASES = [
+  "perfect gift", "gift for kids", "gift for baby",
+  "new baby gift", "birthday gift", "special gift",
+  "unique gift idea", "personalized gift",
+  "educational gift", "custom made"
 ];
 
-// Keywords related to astrology and personalization
-const SPECIAL_KEYWORDS = [
-  "zodiac", "astrology", "horoscope", "birth chart", "star sign",
-  "personalized story", "custom story", "children's gift",
-  "kids gift", "educational", "learning", "development"
+// Target audience and occasion keywords
+const AUDIENCE_KEYWORDS = [
+  "new parents", "little ones", "children", "kids", 
+  "toddler", "baby shower", "birthday", "new baby",
+  "baby gift", "kids gift"
+];
+
+// Product feature keywords
+const FEATURE_KEYWORDS = [
+  "personalized", "customized", "handmade", "unique",
+  "educational", "developmental", "learning", "creative"
+];
+
+// Astrological and specialty keywords
+const SPECIALTY_KEYWORDS = [
+  "zodiac signs", "birth chart", "astrology", "horoscope",
+  "star sign", "astrological", "celestial", "stars"
 ];
 
 export class DatabaseStorage implements IStorage {
@@ -46,60 +65,61 @@ export class DatabaseStorage implements IStorage {
     const content = `${input.title} ${input.description}`.toLowerCase();
     const matchingTags = new Set<string>();
 
-    // Helper function to check if content contains any part of a keyword
+    // Helper function to check if content contains keywords
     const containsKeyword = (keyword: string): boolean => {
       const parts = keyword.toLowerCase().split(' ');
       return parts.every(part => content.includes(part));
     };
 
-    // Add category-specific keywords
+    // Helper function to add tags based on content relevance
+    const addTagsFromKeywords = (keywords: string[], prefix = '') => {
+      keywords.forEach(keyword => {
+        if (containsKeyword(keyword)) {
+          matchingTags.add(prefix + keyword);
+        }
+      });
+    };
+
+    // Add category-specific tags
     const categoryKeywords = KEYWORDS_BY_CATEGORY[input.category] || [];
-    categoryKeywords.forEach(keyword => {
-      if (containsKeyword(keyword)) {
-        matchingTags.add(keyword);
-      }
-    });
+    addTagsFromKeywords(categoryKeywords);
 
-    // Add general keywords
-    GENERAL_KEYWORDS.forEach(keyword => {
-      if (containsKeyword(keyword)) {
-        matchingTags.add(keyword);
-      }
-    });
+    // Add marketing phrases
+    addTagsFromKeywords(MARKETING_PHRASES);
 
-    // Add special keywords for astrology and personalization
-    SPECIAL_KEYWORDS.forEach(keyword => {
-      if (containsKeyword(keyword)) {
-        matchingTags.add(keyword);
-      }
-    });
+    // Add audience-specific tags
+    addTagsFromKeywords(AUDIENCE_KEYWORDS);
 
-    // Extract unique words from content that might be relevant
-    const contentWords = content.split(/\s+/)
-      .filter(word => word.length > 3) // Filter out short words
-      .filter(word => !['and', 'the', 'for', 'are', 'with'].includes(word)); // Filter common words
+    // Add feature-focused tags
+    addTagsFromKeywords(FEATURE_KEYWORDS);
 
-    // Add relevant individual words as tags
-    const relevantWords = ['personalize', 'customize', 'stories', 'zodiac', 'astrological', 'child', 'book'];
-    relevantWords.forEach(word => {
-      if (contentWords.some(w => w.includes(word))) {
-        matchingTags.add(word);
-      }
-    });
+    // Add specialty tags (astrological/zodiac)
+    addTagsFromKeywords(SPECIALTY_KEYWORDS);
 
-    // Add the category itself
-    matchingTags.add(input.category);
+    // Generate compound tags by combining relevant words
+    if (content.includes('story') && content.includes('book')) {
+      matchingTags.add('story book');
+      matchingTags.add('custom story book');
+      matchingTags.add('personalized story book');
+    }
+
+    if (content.includes('child') || content.includes('kid')) {
+      matchingTags.add('children gift');
+      matchingTags.add('kids present');
+      matchingTags.add('gift for kids');
+    }
 
     // Convert to array and limit to 13 tags (Etsy's limit)
-    const tags = Array.from(matchingTags).slice(0, 13);
+    const tags = Array.from(matchingTags)
+      .filter(tag => tag.length > 0)
+      .slice(0, 13);
 
-    // Generate SEO tips based on the content
     const seoTips = [
-      "Make sure your title includes keywords like 'personalized' and 'custom'",
-      "Use all 13 available tags for maximum visibility",
-      `Your top relevant tags are: ${tags.slice(0,3).join(', ')}`,
-      "Consider adding age ranges to target specific customer groups",
-      `Include keywords related to ${input.category.toLowerCase()} and personalization`
+      "Include 'personalized' and 'custom' in your title for better visibility",
+      "Target gift-giving occasions in your tags (birthday, baby shower, etc.)",
+      "Use specific phrases like 'perfect gift for kids' in your description",
+      "Highlight the customization aspects in your first few tags",
+      `Consider seasonal gift-giving opportunities for ${input.category.toLowerCase()}`
     ];
 
     return { tags, seoTips };
