@@ -8,13 +8,19 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
 import { AdPlacement } from "@/components/ui/AdPlacement";
 import { SEOTips } from "@/components/ui/SEOTips";
 import { TagHeatmap } from "@/components/ui/TagHeatmap";
 import { apiRequest } from "@/lib/queryClient";
 import { Loader2Icon, CopyIcon, CheckIcon, ListIcon, GridIcon } from "lucide-react";
+
 
 const categories = [
   "Jewelry",
@@ -75,11 +81,11 @@ export default function Tool() {
     return "bg-muted/50 text-muted-foreground border-muted";
   };
 
-  const copyAllTags = async () => {
+  const copyAllTags = async (includeEmojis: boolean) => {
     if (!results?.tags) return;
 
     const tagText = results.tags
-      .map(({ text, emoji }) => `${emoji} #${text}`)
+      .map(({ text, emoji }) => includeEmojis ? `${emoji} #${text}` : `#${text}`)
       .join(' ');
 
     try {
@@ -87,7 +93,7 @@ export default function Tool() {
       setCopied(true);
       toast({
         title: "Tags Copied!",
-        description: "All tags have been copied to your clipboard.",
+        description: `Tags ${includeEmojis ? 'with emojis ' : ''}have been copied to your clipboard.`,
       });
       setTimeout(() => setCopied(false), 2000);
     } catch (err) {
@@ -211,19 +217,30 @@ export default function Tool() {
                           </>
                         )}
                       </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={copyAllTags}
-                        className="flex items-center gap-2"
-                      >
-                        {copied ? (
-                          <CheckIcon className="h-4 w-4" />
-                        ) : (
-                          <CopyIcon className="h-4 w-4" />
-                        )}
-                        Copy All Tags
-                      </Button>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="flex items-center gap-2"
+                          >
+                            {copied ? (
+                              <CheckIcon className="h-4 w-4" />
+                            ) : (
+                              <CopyIcon className="h-4 w-4" />
+                            )}
+                            Copy Tags
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent>
+                          <DropdownMenuItem onClick={() => copyAllTags(false)}>
+                            Copy Tags Only
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => copyAllTags(true)}>
+                            Copy Tags with Emojis
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
                   </div>
 
