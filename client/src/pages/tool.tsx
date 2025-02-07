@@ -12,8 +12,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { AdPlacement } from "@/components/ui/AdPlacement";
 import { SEOTips } from "@/components/ui/SEOTips";
+import { TagHeatmap } from "@/components/ui/TagHeatmap";
 import { apiRequest } from "@/lib/queryClient";
-import { Loader2Icon, CopyIcon, CheckIcon } from "lucide-react";
+import { Loader2Icon, CopyIcon, CheckIcon, ListIcon, GridIcon } from "lucide-react";
 
 const categories = [
   "Jewelry",
@@ -25,10 +26,13 @@ const categories = [
   "Vintage",
 ];
 
+type ViewMode = "list" | "heatmap";
+
 export default function Tool() {
   const { toast } = useToast();
   const [results, setResults] = useState<{ tags: ScoredTag[], seoTips: string[] } | null>(null);
   const [copied, setCopied] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>("list");
 
   const form = useForm<GenerateTagsRequest>({
     resolver: zodResolver(generateTagsSchema),
@@ -188,34 +192,59 @@ export default function Tool() {
                         Tags are sorted by relevance score (1-10). Higher scores indicate more impactful tags.
                       </p>
                     </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={copyAllTags}
-                      className="flex items-center gap-2"
-                    >
-                      {copied ? (
-                        <CheckIcon className="h-4 w-4" />
-                      ) : (
-                        <CopyIcon className="h-4 w-4" />
-                      )}
-                      Copy All Tags
-                    </Button>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {results.tags.map(({ text, score }, index) => (
-                      <div
-                        key={index}
-                        className={`px-3 py-1.5 rounded-full text-sm font-medium border ${getTagColor(score)} transition-colors duration-200`}
-                        title={`Relevance Score: ${score.toFixed(1)}/10`}
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setViewMode(viewMode === "list" ? "heatmap" : "list")}
+                        className="flex items-center gap-2"
                       >
-                        #{text}
-                        <span className="ml-2 px-1.5 py-0.5 rounded-full bg-background/50 text-xs">
-                          {score.toFixed(1)}
-                        </span>
-                      </div>
-                    ))}
+                        {viewMode === "list" ? (
+                          <>
+                            <GridIcon className="h-4 w-4" />
+                            Show Heatmap
+                          </>
+                        ) : (
+                          <>
+                            <ListIcon className="h-4 w-4" />
+                            Show List
+                          </>
+                        )}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={copyAllTags}
+                        className="flex items-center gap-2"
+                      >
+                        {copied ? (
+                          <CheckIcon className="h-4 w-4" />
+                        ) : (
+                          <CopyIcon className="h-4 w-4" />
+                        )}
+                        Copy All Tags
+                      </Button>
+                    </div>
                   </div>
+
+                  {viewMode === "list" ? (
+                    <div className="flex flex-wrap gap-2">
+                      {results.tags.map(({ text, score }, index) => (
+                        <div
+                          key={index}
+                          className={`px-3 py-1.5 rounded-full text-sm font-medium border ${getTagColor(score)} transition-colors duration-200`}
+                          title={`Relevance Score: ${score.toFixed(1)}/10`}
+                        >
+                          #{text}
+                          <span className="ml-2 px-1.5 py-0.5 rounded-full bg-background/50 text-xs">
+                            {score.toFixed(1)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <TagHeatmap tags={results.tags} className="mt-4" />
+                  )}
                 </CardContent>
               </Card>
 
