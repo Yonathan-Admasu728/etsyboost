@@ -9,13 +9,16 @@ export interface IStorage {
 
 // Basic keyword database for generating tags
 const KEYWORDS_BY_CATEGORY: Record<string, string[]> = {
-  "jewelry": ["handmade", "sterling silver", "boho", "vintage", "gift for her", "necklace", "bracelet", "earrings"],
-  "art": ["wall art", "print", "original", "painting", "digital", "home decor", "custom"],
-  "clothing": ["handmade", "vintage", "custom", "t-shirt", "dress", "fashion", "apparel"],
-  // Add more categories as needed
+  "Jewelry": ["handmade jewelry", "sterling silver", "boho", "vintage", "gift for her", "necklace", "bracelet", "earrings", "jewelry gift"],
+  "Art": ["wall art", "print", "original art", "painting", "digital art", "home decor", "custom art", "artwork"],
+  "Clothing": ["handmade clothing", "vintage clothing", "custom clothing", "t-shirt", "dress", "fashion", "apparel", "boutique"],
+  "Home Decor": ["home decor", "wall decor", "rustic", "modern", "farmhouse", "handmade decor", "custom decor"],
+  "Toys": ["handmade toys", "wooden toys", "educational toys", "baby toys", "kids gifts", "plush toys"],
+  "Craft Supplies": ["craft supplies", "diy materials", "beads", "yarn", "fabric", "crafting tools"],
+  "Vintage": ["vintage items", "antique", "retro", "collectible", "vintage finds", "vintage style"]
 };
 
-const GENERAL_KEYWORDS = ["handmade", "custom", "unique", "gift", "personalized"];
+const GENERAL_KEYWORDS = ["handmade", "custom", "unique", "gift", "personalized", "etsy", "homemade"];
 
 export class DatabaseStorage implements IStorage {
   async createListing(insertListing: InsertListing): Promise<Listing> {
@@ -28,23 +31,42 @@ export class DatabaseStorage implements IStorage {
   }
 
   async generateTags(input: InsertListing): Promise<{ tags: string[], seoTips: string[] }> {
-    const categoryKeywords = KEYWORDS_BY_CATEGORY[input.category.toLowerCase()] || [];
-    const words = input.title.toLowerCase().split(' ').concat(input.description.toLowerCase().split(' '));
+    // Get category-specific keywords
+    const categoryKeywords = KEYWORDS_BY_CATEGORY[input.category] || [];
 
-    const tags = Array.from(new Set([
-      ...categoryKeywords.filter(k => 
-        words.some(w => w.includes(k.toLowerCase()))
-      ),
-      ...GENERAL_KEYWORDS.filter(k => 
-        words.some(w => w.includes(k.toLowerCase()))
-      )
-    ])).slice(0, 13); // Etsy allows max 13 tags
+    // Combine title and description for keyword matching
+    const content = `${input.title} ${input.description}`.toLowerCase();
 
+    // Generate tags from both category-specific and general keywords
+    const matchingTags = new Set<string>();
+
+    // Add category-specific keywords that match the content
+    categoryKeywords.forEach(keyword => {
+      if (content.includes(keyword.toLowerCase())) {
+        matchingTags.add(keyword);
+      }
+    });
+
+    // Add general keywords that match the content
+    GENERAL_KEYWORDS.forEach(keyword => {
+      if (content.includes(keyword.toLowerCase())) {
+        matchingTags.add(keyword);
+      }
+    });
+
+    // Add the category itself as a tag
+    matchingTags.add(input.category);
+
+    // Convert to array and limit to 13 tags (Etsy's limit)
+    const tags = Array.from(matchingTags).slice(0, 13);
+
+    // Generate SEO tips based on the content
     const seoTips = [
       "Make sure your title includes your primary keywords",
       "Use all 13 available tags for maximum visibility",
       "Include material types and occasions in your tags",
       `Consider adding these popular tags: ${tags.slice(0,3).join(', ')}`,
+      `Your listing is categorized as ${input.category} - consider niche-specific tags`
     ];
 
     return { tags, seoTips };
