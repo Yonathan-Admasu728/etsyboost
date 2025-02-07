@@ -10,6 +10,10 @@ import { v4 as uuidv4 } from "uuid";
 import path from "path";
 import fs from "fs/promises";
 
+// Ensure uploads directory exists
+const uploadsDir = path.join(process.cwd(), "uploads");
+fs.mkdir(uploadsDir, { recursive: true }).catch(console.error);
+
 // Configure multer for file uploads
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -42,7 +46,7 @@ export function registerRoutes(app: Express): Server {
       }
 
       // Get user and check credits
-      const user = await storage.getUser(req.body.userId);
+      const user = await storage.getUser(1); // TODO: Replace with actual user ID from auth
       if (!user) {
         return res.status(401).json({ error: "User not found" });
       }
@@ -74,18 +78,18 @@ export function registerRoutes(app: Express): Server {
       const opacity = parseFloat(req.body.opacity);
 
       const outputFileName = `${uuidv4()}.${fileType.ext}`;
-      const outputPath = path.join(process.cwd(), "uploads", outputFileName);
+      const outputPath = path.join(uploadsDir, outputFileName);
 
       if (isImage) {
         const watermarkedImage = await sharp(req.file.buffer)
           .composite([{
-            input: {
-              text: {
-                text: watermarkText,
-                rgba: true,
-                alpha: opacity * 255,
-              }
-            },
+            input: Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="500" height="50">
+              <text x="50%" y="50%" text-anchor="middle" alignment-baseline="middle" 
+                    font-family="Arial" font-size="24" fill="rgba(255,255,255,${opacity})">
+                ${watermarkText}
+              </text>
+            </svg>`),
+            blend: 'over',
             gravity: position.replace("-", "") as sharp.Gravity,
           }])
           .toBuffer();
@@ -98,26 +102,30 @@ export function registerRoutes(app: Express): Server {
         }
       } else if (isVideo) {
         // Save temp video file
-        const inputPath = path.join(process.cwd(), "uploads", `input-${outputFileName}`);
+        const inputPath = path.join(uploadsDir, `input-${outputFileName}`);
         await fs.writeFile(inputPath, req.file.buffer);
 
         // Add watermark using ffmpeg
-        await new Promise((resolve, reject) => {
+        await new Promise<void>((resolve, reject) => {
           ffmpeg(inputPath)
-            .videoFilters({
-              filter: "drawtext",
-              options: {
-                text: watermarkText,
-                fontsize: 24,
-                fontcolor: "white",
-                alpha: opacity,
-                x: position.includes("right") ? "w-tw-10" : "10",
-                y: position.includes("bottom") ? "h-th-10" : "10",
+            .videoFilters([
+              {
+                filter: 'drawtext',
+                options: {
+                  text: watermarkText,
+                  fontsize: '24',
+                  fontcolor: `white@${opacity}`,
+                  x: position.includes('right') ? 'w-tw-10' : '10',
+                  y: position.includes('bottom') ? 'h-th-10' : '10',
+                  box: '1',
+                  boxcolor: 'black@0.4',
+                  boxborderw: '5',
+                }
               }
-            })
+            ])
             .save(outputPath)
-            .on("end", resolve)
-            .on("error", reject);
+            .on('end', resolve)
+            .on('error', reject);
         });
 
         // Clean up temp file

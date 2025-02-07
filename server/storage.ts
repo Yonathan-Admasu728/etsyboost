@@ -1,4 +1,4 @@
-import { listings, type Listing, type InsertListing, type ScoredTag } from "@shared/schema";
+import { listings, type Listing, type InsertListing, type ScoredTag, users, watermarks, type User, type InsertUser, type Watermark, type InsertWatermark } from "@shared/schema";
 import { db } from "./db";
 import { eq } from "drizzle-orm";
 
@@ -37,16 +37,16 @@ const EMOJI_MAPPINGS: Record<string, string[]> = {
 // Marketing-focused keyword database for generating tags
 const KEYWORDS_BY_CATEGORY: Record<string, string[]> = {
   "Books": [
-    "personalized book", "custom story book", "children's book", 
+    "personalized book", "custom story book", "children's book",
     "kids story book", "educational book", "unique story book",
     "personalized story", "custom children's book"
   ],
   "Art": [
-    "personalized art", "custom art", "wall art", 
+    "personalized art", "custom art", "wall art",
     "kids room art", "nursery decor", "custom design"
   ],
   "Personalized Items": [
-    "personalized gift", "custom gift", "unique gift", 
+    "personalized gift", "custom gift", "unique gift",
     "made to order", "custom made", "personalized keepsake"
   ]
 };
@@ -106,6 +106,12 @@ const SPECIALTY_KEYWORDS: Array<[string, number]> = [
 export interface IStorage {
   createListing(listing: InsertListing): Promise<Listing>;
   generateTags(input: InsertListing): Promise<{ tags: ScoredTag[], seoTips: string[] }>;
+  getUser(id: number): Promise<User | undefined>;
+  getUserByEmail(email: string): Promise<User | undefined>;
+  createUser(insertUser: InsertUser): Promise<User>;
+  deductImageCredit(userId: number): Promise<void>;
+  deductVideoCredit(userId: number): Promise<void>;
+  createWatermark(insertWatermark: InsertWatermark): Promise<Watermark>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -203,6 +209,89 @@ export class DatabaseStorage implements IStorage {
     ];
 
     return { tags, seoTips };
+  }
+
+  async getUser(id: number): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user;
+  }
+
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.email, email));
+    return user;
+  }
+
+  async createUser(insertUser: InsertUser): Promise<User> {
+    const [user] = await db
+      .insert(users)
+      .values({
+        ...insertUser,
+        credits: {
+          image: 3,
+          video: 1,
+          lastImageRefresh: new Date().toISOString()
+        }
+      })
+      .returning();
+    return user;
+  }
+
+  async deductImageCredit(userId: number): Promise<void> {
+    const user = await this.getUser(userId);
+    if (!user) throw new Error("User not found");
+
+    const now = new Date();
+    const lastRefresh = new Date(user.credits.lastImageRefresh);
+
+    // Reset credits if it's a new day
+    if (lastRefresh.getDate() !== now.getDate() ||
+        lastRefresh.getMonth() !== now.getMonth() ||
+        lastRefresh.getFullYear() !== now.getFullYear()) {
+      await db
+        .update(users)
+        .set({
+          credits: {
+            ...user.credits,
+            image: 2, // Set to 2 because we're using 1 credit now
+            lastImageRefresh: now.toISOString()
+          }
+        })
+        .where(eq(users.id, userId));
+    } else {
+      // Deduct 1 credit
+      await db
+        .update(users)
+        .set({
+          credits: {
+            ...user.credits,
+            image: user.credits.image - 1
+          }
+        })
+        .where(eq(users.id, userId));
+    }
+  }
+
+  async deductVideoCredit(userId: number): Promise<void> {
+    const user = await this.getUser(userId);
+    if (!user) throw new Error("User not found");
+
+    await db
+      .update(users)
+      .set({
+        credits: {
+          ...user.credits,
+          video: user.credits.video - 1
+        }
+      })
+      .where(eq(users.id, userId));
+  }
+
+  async createWatermark(insertWatermark: InsertWatermark): Promise<Watermark> {
+    const [watermark] = await db
+      .insert(watermarks)
+      .values(insertWatermark)
+      .returning();
+    return watermark;
   }
 }
 
