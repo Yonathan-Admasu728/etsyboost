@@ -47,7 +47,7 @@ export default function Tool() {
       setResults(data);
       toast({
         title: "Tags Generated!",
-        description: "Scroll down to see your optimized tags and SEO tips.",
+        description: "Your tags and SEO tips have been generated successfully.",
       });
     },
     onError: () => {
@@ -64,110 +64,112 @@ export default function Tool() {
   };
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <h1 className="text-3xl font-bold text-center mb-8">Generate Etsy Tags</h1>
-      
-      <div className="grid md:grid-cols-2 gap-8">
-        <Card>
-          <CardContent className="pt-6">
-            <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-                <FormField
-                  control={form.control}
-                  name="title"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Listing Title</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Enter your listing title" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+    <div className="min-h-screen bg-background">
+      <div className="container mx-auto px-4 py-8">
+        <h1 className="text-3xl font-bold text-center mb-8">Generate Etsy Tags</h1>
 
-                <FormField
-                  control={form.control}
-                  name="description"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Description</FormLabel>
-                      <FormControl>
-                        <Textarea 
-                          placeholder="Enter your listing description" 
-                          className="min-h-[100px]"
-                          {...field} 
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="category"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Category</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+        <div className="space-y-8">
+          <Card>
+            <CardContent className="pt-6">
+              <Form {...form}>
+                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+                  <FormField
+                    control={form.control}
+                    name="title"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Listing Title</FormLabel>
                         <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select a category" />
-                          </SelectTrigger>
+                          <Input placeholder="Enter your listing title" {...field} />
                         </FormControl>
-                        <SelectContent>
-                          {categories.map((category) => (
-                            <SelectItem key={category} value={category}>
-                              {category}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
 
-                <Button type="submit" className="w-full" disabled={mutation.isPending}>
-                  {mutation.isPending ? (
-                    <>
-                      <Loader2Icon className="mr-2 h-4 w-4 animate-spin" />
-                      Generating...
-                    </>
-                  ) : (
-                    "Generate Tags"
-                  )}
-                </Button>
-              </form>
-            </Form>
-          </CardContent>
-        </Card>
+                  <FormField
+                    control={form.control}
+                    name="description"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Description</FormLabel>
+                        <FormControl>
+                          <Textarea 
+                            placeholder="Enter your listing description" 
+                            className="min-h-[100px]"
+                            {...field} 
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
 
-        {results && (
-          <div className="space-y-6">
-            <Card>
-              <CardContent className="pt-6">
-                <h2 className="text-xl font-semibold mb-4">Generated Tags</h2>
-                <div className="flex flex-wrap gap-2">
-                  {results.tags.map((tag, index) => (
-                    <div
-                      key={index}
-                      className="bg-accent px-3 py-1 rounded-full text-sm"
-                    >
-                      {tag}
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+                  <FormField
+                    control={form.control}
+                    name="category"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Category</FormLabel>
+                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select a category" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {categories.map((category) => (
+                              <SelectItem key={category} value={category}>
+                                {category}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
 
-            <SEOTips tips={results.seoTips} />
-          </div>
-        )}
+                  <Button type="submit" className="w-full" disabled={mutation.isPending}>
+                    {mutation.isPending ? (
+                      <>
+                        <Loader2Icon className="mr-2 h-4 w-4 animate-spin" />
+                        Generating...
+                      </>
+                    ) : (
+                      "Generate Tags"
+                    )}
+                  </Button>
+                </form>
+              </Form>
+            </CardContent>
+          </Card>
+
+          {results && (
+            <div className="space-y-6">
+              <Card>
+                <CardContent className="pt-6">
+                  <h2 className="text-xl font-semibold mb-4">Generated Tags</h2>
+                  <div className="flex flex-wrap gap-2">
+                    {results.tags.map((tag, index) => (
+                      <div
+                        key={index}
+                        className="bg-accent/50 px-3 py-1.5 rounded-full text-sm font-medium"
+                      >
+                        #{tag}
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+
+              <SEOTips tips={results.seoTips} />
+            </div>
+          )}
+
+          <AdPlacement />
+        </div>
       </div>
-
-      <AdPlacement className="mt-8" />
     </div>
   );
 }
