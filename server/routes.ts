@@ -9,9 +9,7 @@ import ffmpeg from "fluent-ffmpeg";
 import { v4 as uuidv4 } from "uuid";
 import path from "path";
 import fs from "fs/promises";
-import { db } from "./db"; // Import db connection
-import { eq } from "drizzle-orm"; // Import drizzle operator
-import { users } from "@shared/schema"; // Import schema from shared
+import { setupAuth } from "./auth";
 
 // Ensure uploads directory exists
 const uploadsDir = path.join(process.cwd(), "uploads");
@@ -24,6 +22,14 @@ const upload = multer({
     fileSize: 50 * 1024 * 1024, // 50MB limit
   },
 });
+
+// Middleware to check authentication
+function isAuthenticated(req: Express.Request, res: Express.Response, next: Express.NextFunction) {
+  if (req.isAuthenticated()) {
+    return next();
+  }
+  res.status(401).json({ error: "Authentication required" });
+}
 
 // Helper function to convert position to Sharp gravity
 function getGravity(position: string): sharp.Gravity {
@@ -38,7 +44,10 @@ function getGravity(position: string): sharp.Gravity {
 }
 
 export function registerRoutes(app: Express): Server {
-  // Existing generateTags route
+  // Set up authentication routes
+  setupAuth(app);
+
+  // Public route - Generate tags
   app.post("/api/generate-tags", async (req, res) => {
     try {
       const validation = generateTagsSchema.safeParse(req.body);
@@ -53,19 +62,14 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // New watermark route
-  app.post("/api/watermark", upload.single("file"), async (req, res) => {
+  // Protected route - Watermark
+  app.post("/api/watermark", isAuthenticated, upload.single("file"), async (req, res) => {
     try {
       if (!req.file) {
         return res.status(400).json({ error: "No file uploaded" });
       }
 
-      // Get user and check credits
-      // TODO: Replace with actual user ID from auth
-      const [user] = await db.select().from(users).where(eq(users.email, 'test@example.com'));
-      if (!user) {
-        return res.status(401).json({ error: "User not found" });
-      }
+      const user = req.user!;
 
       // Detect file type
       const fileType = await fileTypeFromBuffer(req.file.buffer);
@@ -82,10 +86,19 @@ export function registerRoutes(app: Express): Server {
 
       // Check credits
       if (isImage && user.credits.image <= 0 && !user.isPremium) {
-        return res.status(403).json({ error: "Insufficient image credits" });
+        return res.status(403).json({ 
+          error: "Insufficient image credits",
+          type: "credits_exceeded",
+          remaining: user.credits.image,
+          nextRefresh: user.credits.lastImageRefresh
+        });
       }
       if (isVideo && user.credits.video <= 0 && !user.isPremium) {
-        return res.status(403).json({ error: "Insufficient video credits" });
+        return res.status(403).json({ 
+          error: "Insufficient video credits",
+          type: "credits_exceeded",
+          remaining: user.credits.video
+        });
       }
 
       // Process watermark

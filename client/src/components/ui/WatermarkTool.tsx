@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Slider } from "@/components/ui/slider";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/use-auth";
+import { AuthForm } from "@/components/ui/AuthForm";
 import {
   Select,
   SelectContent,
@@ -15,19 +17,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { UploadIcon, ImageIcon, VideoIcon } from "lucide-react";
-
-interface CreditInfo {
-  image: number;
-  video: number;
-  lastImageRefresh: string;
-  isPremium: boolean;
-}
+import { UploadIcon, ImageIcon, VideoIcon, CrownIcon } from "lucide-react";
 
 export function WatermarkTool() {
   const { toast } = useToast();
+  const { user } = useAuth();
   const [preview, setPreview] = useState<string | null>(null);
-  const [credits, setCredits] = useState<CreditInfo | null>(null);
   const [isUploading, setIsUploading] = useState(false);
 
   const form = useForm<WatermarkRequest>({
@@ -54,16 +49,18 @@ export function WatermarkTool() {
       });
 
       if (!response.ok) {
-        const error = await response.text();
-        if (error.includes("insufficient credits")) {
+        const error = await response.json();
+        if (error.type === "credits_exceeded") {
           toast({
             title: "Insufficient Credits",
-            description: "Please upgrade to premium to continue watermarking.",
+            description: user?.isPremium 
+              ? "An error occurred while processing your request." 
+              : "You've reached your daily limit. Upgrade to premium for unlimited watermarks!",
             variant: "destructive",
           });
           return;
         }
-        throw new Error(error);
+        throw new Error(error.error || "Failed to process watermark");
       }
 
       const result = await response.blob();
@@ -85,6 +82,11 @@ export function WatermarkTool() {
     }
   };
 
+  // If user is not authenticated, show the auth form
+  if (!user) {
+    return <AuthForm />;
+  }
+
   return (
     <Card>
       <CardContent className="pt-6">
@@ -95,18 +97,24 @@ export function WatermarkTool() {
               Add professional watermarks to your images and videos
             </p>
           </div>
-          {credits && (
-            <div className="text-right">
-              <p className="text-sm font-medium">
-                Credits Remaining:
-              </p>
-              <div className="flex items-center gap-2 mt-1">
-                <ImageIcon className="w-4 h-4" />
-                <span className="text-sm">{credits.image}</span>
-                <VideoIcon className="w-4 h-4 ml-2" />
-                <span className="text-sm">{credits.video}</span>
-              </div>
-              {!credits.isPremium && (
+          <div className="text-right">
+            <div className="flex items-center gap-2">
+              {user.isPremium && (
+                <div className="flex items-center text-primary">
+                  <CrownIcon className="w-4 h-4 mr-1" />
+                  <span className="text-sm font-medium">Premium</span>
+                </div>
+              )}
+            </div>
+            {!user.isPremium && (
+              <div className="mt-2">
+                <p className="text-sm font-medium mb-1">Credits Remaining:</p>
+                <div className="flex items-center gap-2">
+                  <ImageIcon className="w-4 h-4" />
+                  <span className="text-sm">{user.credits.image}</span>
+                  <VideoIcon className="w-4 h-4 ml-2" />
+                  <span className="text-sm">{user.credits.video}</span>
+                </div>
                 <Button
                   variant="outline"
                   size="sm"
@@ -115,9 +123,9 @@ export function WatermarkTool() {
                 >
                   Upgrade to Premium
                 </Button>
-              )}
-            </div>
-          )}
+              </div>
+            )}
+          </div>
         </div>
 
         <Form {...form}>
