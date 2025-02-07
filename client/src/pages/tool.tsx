@@ -47,7 +47,7 @@ type ViewMode = "list" | "heatmap";
 
 export default function Tool() {
   // Get the tab from URL parameters
-  const [searchParams] = new URLSearchParams(window.location.search);
+  const searchParams = new URLSearchParams(window.location.search);
   const initialTab = searchParams.get('tab') || 'tags';
 
   return (
