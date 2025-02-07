@@ -28,6 +28,7 @@ import { TagHeatmap } from "@/components/ui/TagHeatmap";
 import { apiRequest } from "@/lib/queryClient";
 import { Loader2Icon, CopyIcon, CheckIcon, ListIcon, GridIcon } from "lucide-react";
 import { SEO } from "@/components/ui/seo";
+import { SocialPreview } from "@/components/ui/SocialPreview";
 
 
 const categories = [
@@ -288,6 +289,12 @@ export default function Tool() {
                 </Card>
 
                 <SEOTips tips={results.seoTips} />
+
+                <SocialPreview
+                  title={form.getValues("title")}
+                  description={form.getValues("description")}
+                  tags={results.tags}
+                />
               </div>
             )}
 
