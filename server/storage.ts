@@ -1,11 +1,13 @@
-import { type Listing, type InsertListing } from "@shared/schema";
+import { listings, type Listing, type InsertListing } from "@shared/schema";
+import { db } from "./db";
+import { eq } from "drizzle-orm";
 
 export interface IStorage {
   createListing(listing: InsertListing): Promise<Listing>;
   generateTags(input: InsertListing): Promise<{ tags: string[], seoTips: string[] }>;
 }
 
-// Basic keyword database
+// Basic keyword database for generating tags
 const KEYWORDS_BY_CATEGORY: Record<string, string[]> = {
   "jewelry": ["handmade", "sterling silver", "boho", "vintage", "gift for her", "necklace", "bracelet", "earrings"],
   "art": ["wall art", "print", "original", "painting", "digital", "home decor", "custom"],
@@ -15,35 +17,28 @@ const KEYWORDS_BY_CATEGORY: Record<string, string[]> = {
 
 const GENERAL_KEYWORDS = ["handmade", "custom", "unique", "gift", "personalized"];
 
-export class MemStorage implements IStorage {
-  private listings: Map<number, Listing>;
-  private currentId: number;
-
-  constructor() {
-    this.listings = new Map();
-    this.currentId = 1;
-  }
-
+export class DatabaseStorage implements IStorage {
   async createListing(insertListing: InsertListing): Promise<Listing> {
     const { tags, seoTips } = await this.generateTags(insertListing);
-    const id = this.currentId++;
-    const listing: Listing = { ...insertListing, id, tags, seoTips };
-    this.listings.set(id, listing);
+    const [listing] = await db
+      .insert(listings)
+      .values({ ...insertListing, tags, seoTips })
+      .returning();
     return listing;
   }
 
   async generateTags(input: InsertListing): Promise<{ tags: string[], seoTips: string[] }> {
     const categoryKeywords = KEYWORDS_BY_CATEGORY[input.category.toLowerCase()] || [];
     const words = input.title.toLowerCase().split(' ').concat(input.description.toLowerCase().split(' '));
-    
-    const tags = [...new Set([
+
+    const tags = Array.from(new Set([
       ...categoryKeywords.filter(k => 
         words.some(w => w.includes(k.toLowerCase()))
       ),
       ...GENERAL_KEYWORDS.filter(k => 
         words.some(w => w.includes(k.toLowerCase()))
       )
-    ])].slice(0, 13); // Etsy allows max 13 tags
+    ])).slice(0, 13); // Etsy allows max 13 tags
 
     const seoTips = [
       "Make sure your title includes your primary keywords",
@@ -56,4 +51,4 @@ export class MemStorage implements IStorage {
   }
 }
 
-export const storage = new MemStorage();
+export const storage = new DatabaseStorage();
