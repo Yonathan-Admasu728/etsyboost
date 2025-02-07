@@ -1,7 +1,0 @@
-<svg width="20" height="20" xmlns="http://www.w3.org/2000/svg">
-  <pattern id="pattern" width="20" height="20" patternUnits="userSpaceOnUse">
-    <rect width="10" height="10" fill="#f0f0f0"/>
-    <rect x="10" y="10" width="10" height="10" fill="#f0f0f0"/>
-  </pattern>
-  <rect width="20" height="20" fill="url(#pattern)"/>
-</svg>

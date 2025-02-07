@@ -30,7 +30,6 @@ import { ColorPalette } from "@/components/ui/ColorPalette";
 import { apiRequest } from "@/lib/queryClient";
 import { Loader2Icon, CopyIcon, CheckIcon, ListIcon, GridIcon } from "lucide-react";
 import { SEO } from "@/components/ui/seo";
-import { BackgroundRemover } from "@/components/ui/BackgroundRemover"; // Added import
 
 
 const categories = [
@@ -118,7 +117,7 @@ export default function Tool() {
 
   return (
     <>
-      <SEO
+      <SEO 
         title="Generate Etsy Tags - Free SEO Tag Generator Tool"
         description="Create optimized tags for your Etsy listings with our intelligent tag generator. Get relevance scores, emoji suggestions, and SEO tips to improve visibility."
         keywords={[
@@ -301,7 +300,6 @@ export default function Tool() {
               </div>
             )}
 
-            <BackgroundRemover /> {/* Added BackgroundRemover component */}
             <AdPlacement />
           </div>
         </div>
