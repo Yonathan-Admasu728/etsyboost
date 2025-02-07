@@ -25,10 +25,11 @@ import { useToast } from "@/hooks/use-toast";
 import { AdPlacement } from "@/components/ui/AdPlacement";
 import { SEOTips } from "@/components/ui/SEOTips";
 import { TagHeatmap } from "@/components/ui/TagHeatmap";
+import { SocialPreview } from "@/components/ui/SocialPreview";
+import { ColorPalette } from "@/components/ui/ColorPalette";
 import { apiRequest } from "@/lib/queryClient";
 import { Loader2Icon, CopyIcon, CheckIcon, ListIcon, GridIcon } from "lucide-react";
 import { SEO } from "@/components/ui/seo";
-import { SocialPreview } from "@/components/ui/SocialPreview";
 
 
 const categories = [
@@ -295,6 +296,7 @@ export default function Tool() {
                   description={form.getValues("description")}
                   tags={results.tags}
                 />
+                <ColorPalette />
               </div>
             )}
 
