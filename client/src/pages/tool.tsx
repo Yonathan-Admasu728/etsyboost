@@ -46,6 +46,10 @@ const categories = [
 type ViewMode = "list" | "heatmap";
 
 export default function Tool() {
+  // Get the tab from URL parameters
+  const [searchParams] = new URLSearchParams(window.location.search);
+  const initialTab = searchParams.get('tab') || 'tags';
+
   return (
     <>
       <SEO 
@@ -63,7 +67,7 @@ export default function Tool() {
       />
       <div className="min-h-screen bg-background">
         <div className="container mx-auto px-4 py-8">
-          <Tabs defaultValue="tags" className="w-full">
+          <Tabs defaultValue={initialTab} className="w-full">
             <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="tags">Tag Generator</TabsTrigger>
               <TabsTrigger value="watermark">Watermark Tool</TabsTrigger>
