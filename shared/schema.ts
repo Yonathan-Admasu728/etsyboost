@@ -7,7 +7,7 @@ export const listings = pgTable("listings", {
   title: varchar("title", { length: 140 }).notNull(),
   description: text("description").notNull(),
   category: varchar("category", { length: 100 }).notNull(),
-  tags: json("tags").$type<string[]>().notNull(),
+  tags: json("tags").$type<Array<{ text: string, score: number }>>().notNull(),
   seoTips: json("seoTips").$type<string[]>().notNull(),
 });
 
@@ -27,3 +27,8 @@ export const generateTagsSchema = z.object({
 });
 
 export type GenerateTagsRequest = z.infer<typeof generateTagsSchema>;
+
+export type ScoredTag = {
+  text: string;
+  score: number;
+};

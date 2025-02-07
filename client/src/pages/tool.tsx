@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation } from "@tanstack/react-query";
-import { generateTagsSchema, type GenerateTagsRequest } from "@shared/schema";
+import { generateTagsSchema, type GenerateTagsRequest, type ScoredTag } from "@shared/schema";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -27,7 +27,7 @@ const categories = [
 
 export default function Tool() {
   const { toast } = useToast();
-  const [results, setResults] = useState<{ tags: string[], seoTips: string[] } | null>(null);
+  const [results, setResults] = useState<{ tags: ScoredTag[], seoTips: string[] } | null>(null);
 
   const form = useForm<GenerateTagsRequest>({
     resolver: zodResolver(generateTagsSchema),
@@ -63,6 +63,13 @@ export default function Tool() {
     mutation.mutate(data);
   };
 
+  // Helper function to get tag color based on score
+  const getTagColor = (score: number) => {
+    if (score >= 9) return "bg-primary/20 text-primary border-primary";
+    if (score >= 7) return "bg-accent/20 text-accent-foreground border-accent";
+    return "bg-muted/50 text-muted-foreground border-muted";
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <div className="container mx-auto px-4 py-8">
@@ -94,10 +101,10 @@ export default function Tool() {
                       <FormItem>
                         <FormLabel>Description</FormLabel>
                         <FormControl>
-                          <Textarea 
-                            placeholder="Enter your listing description" 
+                          <Textarea
+                            placeholder="Enter your listing description"
                             className="min-h-[100px]"
-                            {...field} 
+                            {...field}
                           />
                         </FormControl>
                         <FormMessage />
@@ -150,13 +157,20 @@ export default function Tool() {
               <Card>
                 <CardContent className="pt-6">
                   <h2 className="text-xl font-semibold mb-4">Generated Tags</h2>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Tags are sorted by relevance score (1-10). Higher scores indicate more impactful tags.
+                  </p>
                   <div className="flex flex-wrap gap-2">
-                    {results.tags.map((tag, index) => (
+                    {results.tags.map(({ text, score }, index) => (
                       <div
                         key={index}
-                        className="bg-accent/50 px-3 py-1.5 rounded-full text-sm font-medium"
+                        className={`px-3 py-1.5 rounded-full text-sm font-medium border ${getTagColor(score)} transition-colors duration-200`}
+                        title={`Relevance Score: ${score.toFixed(1)}/10`}
                       >
-                        #{tag}
+                        #{text}
+                        <span className="ml-2 px-1.5 py-0.5 rounded-full bg-background/50 text-xs">
+                          {score.toFixed(1)}
+                        </span>
                       </div>
                     ))}
                   </div>
