@@ -25,6 +25,18 @@ const upload = multer({
   },
 });
 
+// Helper function to convert position to Sharp gravity
+function getGravity(position: string): sharp.Gravity {
+  switch (position) {
+    case "top-left": return "northwest";
+    case "top-right": return "northeast";
+    case "bottom-left": return "southwest";
+    case "bottom-right": return "southeast";
+    case "center": return "center";
+    default: return "southeast";
+  }
+}
+
 export function registerRoutes(app: Express): Server {
   // Existing generateTags route
   app.post("/api/generate-tags", async (req, res) => {
@@ -94,11 +106,9 @@ export function registerRoutes(app: Express): Server {
               </text>
             </svg>`),
             blend: 'over',
-            gravity: position.replace("-", "") as sharp.Gravity,
+            gravity: getGravity(position),
           }])
           .toBuffer();
-
-        await fs.writeFile(outputPath, watermarkedImage);
 
         // Deduct credit if not premium
         if (!user.isPremium) {
@@ -110,7 +120,7 @@ export function registerRoutes(app: Express): Server {
           type: "image",
           originalFile: req.file.originalname,
           watermarkedFile: outputFileName,
-          userId: user.id // Added userId here
+          userId: user.id
         });
 
         // Send the watermarked image
@@ -156,7 +166,7 @@ export function registerRoutes(app: Express): Server {
           type: "video",
           originalFile: req.file.originalname,
           watermarkedFile: outputFileName,
-          userId: user.id // Added userId here
+          userId: user.id
         });
 
         // Send the watermarked video
