@@ -13,7 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import { AdPlacement } from "@/components/ui/AdPlacement";
 import { SEOTips } from "@/components/ui/SEOTips";
 import { apiRequest } from "@/lib/queryClient";
-import { Loader2Icon } from "lucide-react";
+import { Loader2Icon, CopyIcon, CheckIcon } from "lucide-react";
 
 const categories = [
   "Jewelry",
@@ -28,6 +28,7 @@ const categories = [
 export default function Tool() {
   const { toast } = useToast();
   const [results, setResults] = useState<{ tags: ScoredTag[], seoTips: string[] } | null>(null);
+  const [copied, setCopied] = useState(false);
 
   const form = useForm<GenerateTagsRequest>({
     resolver: zodResolver(generateTagsSchema),
@@ -68,6 +69,30 @@ export default function Tool() {
     if (score >= 9) return "bg-primary/20 text-primary border-primary";
     if (score >= 7) return "bg-accent/20 text-accent-foreground border-accent";
     return "bg-muted/50 text-muted-foreground border-muted";
+  };
+
+  const copyAllTags = async () => {
+    if (!results?.tags) return;
+
+    const tagText = results.tags
+      .map(({ text }) => `#${text}`)
+      .join(' ');
+
+    try {
+      await navigator.clipboard.writeText(tagText);
+      setCopied(true);
+      toast({
+        title: "Tags Copied!",
+        description: "All tags have been copied to your clipboard.",
+      });
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      toast({
+        title: "Copy Failed",
+        description: "Failed to copy tags. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   return (
@@ -156,10 +181,27 @@ export default function Tool() {
             <div className="space-y-6">
               <Card>
                 <CardContent className="pt-6">
-                  <h2 className="text-xl font-semibold mb-4">Generated Tags</h2>
-                  <p className="text-sm text-muted-foreground mb-4">
-                    Tags are sorted by relevance score (1-10). Higher scores indicate more impactful tags.
-                  </p>
+                  <div className="flex justify-between items-center mb-4">
+                    <div>
+                      <h2 className="text-xl font-semibold">Generated Tags</h2>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        Tags are sorted by relevance score (1-10). Higher scores indicate more impactful tags.
+                      </p>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={copyAllTags}
+                      className="flex items-center gap-2"
+                    >
+                      {copied ? (
+                        <CheckIcon className="h-4 w-4" />
+                      ) : (
+                        <CopyIcon className="h-4 w-4" />
+                      )}
+                      Copy All Tags
+                    </Button>
+                  </div>
                   <div className="flex flex-wrap gap-2">
                     {results.tags.map(({ text, score }, index) => (
                       <div
