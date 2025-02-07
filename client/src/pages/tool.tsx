@@ -27,6 +27,7 @@ import { SEOTips } from "@/components/ui/SEOTips";
 import { TagHeatmap } from "@/components/ui/TagHeatmap";
 import { apiRequest } from "@/lib/queryClient";
 import { Loader2Icon, CopyIcon, CheckIcon, ListIcon, GridIcon } from "lucide-react";
+import { SEO } from "@/components/ui/seo";
 
 
 const categories = [
@@ -113,172 +114,187 @@ export default function Tool() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="container mx-auto px-4 py-8">
-        <h1 className="text-3xl font-bold text-center mb-8">Generate Etsy Tags</h1>
+    <>
+      <SEO 
+        title="Generate Etsy Tags - Free SEO Tag Generator Tool"
+        description="Create optimized tags for your Etsy listings with our intelligent tag generator. Get relevance scores, emoji suggestions, and SEO tips to improve visibility."
+        keywords={[
+          "etsy tag generator",
+          "etsy seo tool",
+          "etsy listing tags",
+          "etsy keywords",
+          "etsy shop optimization",
+          "etsy tag suggestions",
+          "free etsy tools"
+        ]}
+      />
+      <div className="min-h-screen bg-background">
+        <div className="container mx-auto px-4 py-8">
+          <h1 className="text-3xl font-bold text-center mb-8">Generate Etsy Tags</h1>
 
-        <div className="space-y-8">
-          <Card>
-            <CardContent className="pt-6">
-              <Form {...form}>
-                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-                  <FormField
-                    control={form.control}
-                    name="title"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Listing Title</FormLabel>
-                        <FormControl>
-                          <Input placeholder="Enter your listing title" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="description"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Description</FormLabel>
-                        <FormControl>
-                          <Textarea
-                            placeholder="Enter your listing description"
-                            className="min-h-[100px]"
-                            {...field}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="category"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Category</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+          <div className="space-y-8">
+            <Card>
+              <CardContent className="pt-6">
+                <Form {...form}>
+                  <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+                    <FormField
+                      control={form.control}
+                      name="title"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Listing Title</FormLabel>
                           <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select a category" />
-                            </SelectTrigger>
+                            <Input placeholder="Enter your listing title" {...field} />
                           </FormControl>
-                          <SelectContent>
-                            {categories.map((category) => (
-                              <SelectItem key={category} value={category}>
-                                {category}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
 
-                  <Button type="submit" className="w-full" disabled={mutation.isPending}>
-                    {mutation.isPending ? (
-                      <>
-                        <Loader2Icon className="mr-2 h-4 w-4 animate-spin" />
-                        Generating...
-                      </>
-                    ) : (
-                      "Generate Tags"
-                    )}
-                  </Button>
-                </form>
-              </Form>
-            </CardContent>
-          </Card>
+                    <FormField
+                      control={form.control}
+                      name="description"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Description</FormLabel>
+                          <FormControl>
+                            <Textarea
+                              placeholder="Enter your listing description"
+                              className="min-h-[100px]"
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
 
-          {results && (
-            <div className="space-y-6">
-              <Card>
-                <CardContent className="pt-6">
-                  <div className="flex justify-between items-center mb-4">
-                    <div>
-                      <h2 className="text-xl font-semibold">Generated Tags</h2>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        Tags are sorted by relevance score (1-10). Higher scores indicate more impactful tags.
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setViewMode(viewMode === "list" ? "heatmap" : "list")}
-                        className="flex items-center gap-2"
-                      >
-                        {viewMode === "list" ? (
-                          <>
-                            <GridIcon className="h-4 w-4" />
-                            Show Heatmap
-                          </>
-                        ) : (
-                          <>
-                            <ListIcon className="h-4 w-4" />
-                            Show List
-                          </>
-                        )}
-                      </Button>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="flex items-center gap-2"
-                          >
-                            {copied ? (
-                              <CheckIcon className="h-4 w-4" />
-                            ) : (
-                              <CopyIcon className="h-4 w-4" />
-                            )}
-                            Copy Tags
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent>
-                          <DropdownMenuItem onClick={() => copyAllTags(false)}>
-                            Copy Tags Only
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => copyAllTags(true)}>
-                            Copy Tags with Emojis
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
-                  </div>
+                    <FormField
+                      control={form.control}
+                      name="category"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Category</FormLabel>
+                          <Select onValueChange={field.onChange} defaultValue={field.value}>
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select a category" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {categories.map((category) => (
+                                <SelectItem key={category} value={category}>
+                                  {category}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
 
-                  {viewMode === "list" ? (
-                    <div className="flex flex-wrap gap-2">
-                      {results.tags.map(({ text, score, emoji }, index) => (
-                        <div
-                          key={index}
-                          className={`px-3 py-1.5 rounded-full text-sm font-medium border ${getTagColor(score)} transition-colors duration-200`}
-                          title={`Relevance Score: ${score.toFixed(1)}/10`}
+                    <Button type="submit" className="w-full" disabled={mutation.isPending}>
+                      {mutation.isPending ? (
+                        <>
+                          <Loader2Icon className="mr-2 h-4 w-4 animate-spin" />
+                          Generating...
+                        </>
+                      ) : (
+                        "Generate Tags"
+                      )}
+                    </Button>
+                  </form>
+                </Form>
+              </CardContent>
+            </Card>
+
+            {results && (
+              <div className="space-y-6">
+                <Card>
+                  <CardContent className="pt-6">
+                    <div className="flex justify-between items-center mb-4">
+                      <div>
+                        <h2 className="text-xl font-semibold">Generated Tags</h2>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          Tags are sorted by relevance score (1-10). Higher scores indicate more impactful tags.
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setViewMode(viewMode === "list" ? "heatmap" : "list")}
+                          className="flex items-center gap-2"
                         >
-                          {emoji} #{text}
-                          <span className="ml-2 px-1.5 py-0.5 rounded-full bg-background/50 text-xs">
-                            {score.toFixed(1)}
-                          </span>
-                        </div>
-                      ))}
+                          {viewMode === "list" ? (
+                            <>
+                              <GridIcon className="h-4 w-4" />
+                              Show Heatmap
+                            </>
+                          ) : (
+                            <>
+                              <ListIcon className="h-4 w-4" />
+                              Show List
+                            </>
+                          )}
+                        </Button>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="flex items-center gap-2"
+                            >
+                              {copied ? (
+                                <CheckIcon className="h-4 w-4" />
+                              ) : (
+                                <CopyIcon className="h-4 w-4" />
+                              )}
+                              Copy Tags
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent>
+                            <DropdownMenuItem onClick={() => copyAllTags(false)}>
+                              Copy Tags Only
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => copyAllTags(true)}>
+                              Copy Tags with Emojis
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
                     </div>
-                  ) : (
-                    <TagHeatmap tags={results.tags} className="mt-4" />
-                  )}
-                </CardContent>
-              </Card>
 
-              <SEOTips tips={results.seoTips} />
-            </div>
-          )}
+                    {viewMode === "list" ? (
+                      <div className="flex flex-wrap gap-2">
+                        {results.tags.map(({ text, score, emoji }, index) => (
+                          <div
+                            key={index}
+                            className={`px-3 py-1.5 rounded-full text-sm font-medium border ${getTagColor(score)} transition-colors duration-200`}
+                            title={`Relevance Score: ${score.toFixed(1)}/10`}
+                          >
+                            {emoji} #{text}
+                            <span className="ml-2 px-1.5 py-0.5 rounded-full bg-background/50 text-xs">
+                              {score.toFixed(1)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <TagHeatmap tags={results.tags} className="mt-4" />
+                    )}
+                  </CardContent>
+                </Card>
 
-          <AdPlacement />
+                <SEOTips tips={results.seoTips} />
+              </div>
+            )}
+
+            <AdPlacement />
+          </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }

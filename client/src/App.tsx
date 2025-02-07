@@ -8,19 +8,23 @@ import Tool from "@/pages/tool";
 
 function Router() {
   return (
-    <Switch>
-      <Route path="/" component={Home} />
-      <Route path="/tool" component={Tool} />
-      <Route component={NotFound} />
-    </Switch>
+    <main role="main">
+      <Switch>
+        <Route path="/" component={Home} />
+        <Route path="/tool" component={Tool} />
+        <Route component={NotFound} />
+      </Switch>
+    </main>
   );
 }
 
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <Router />
-      <Toaster />
+      <div lang="en" className="min-h-screen">
+        <Router />
+        <Toaster />
+      </div>
     </QueryClientProvider>
   );
 }
