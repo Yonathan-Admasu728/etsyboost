@@ -92,14 +92,6 @@ export function registerRoutes(app: Express): Server {
           }])
           .toBuffer();
 
-        // Store watermark record
-        await storage.createWatermark({
-          type: "image",
-          originalFile: req.file.originalname,
-          watermarkedFile: outputFileName,
-          userId: 1 // Default user ID since we removed auth
-        });
-
         // Send the watermarked image
         res.setHeader('Content-Type', fileType.mime);
         res.setHeader('Content-Disposition', `attachment; filename="watermarked.${fileType.ext}"`);
@@ -132,14 +124,6 @@ export function registerRoutes(app: Express): Server {
 
         // Clean up temp file
         await fs.unlink(inputPath);
-
-        // Store watermark record
-        await storage.createWatermark({
-          type: "video",
-          originalFile: req.file.originalname,
-          watermarkedFile: outputFileName,
-          userId: 1 // Default user ID since we removed auth
-        });
 
         // Send the watermarked video
         res.setHeader('Content-Type', fileType.mime);

@@ -8,8 +8,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Slider } from "@/components/ui/slider";
 import { useToast } from "@/hooks/use-toast";
-import { useAuth } from "@/hooks/use-auth";
-import { AuthForm } from "@/components/ui/AuthForm";
 import {
   Select,
   SelectContent,
@@ -17,11 +15,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { UploadIcon, ImageIcon, VideoIcon, CrownIcon } from "lucide-react";
+import { UploadIcon } from "lucide-react";
 
 export function WatermarkTool() {
   const { toast } = useToast();
-  const { user } = useAuth();
   const [preview, setPreview] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
 
@@ -49,18 +46,7 @@ export function WatermarkTool() {
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        if (error.type === "credits_exceeded") {
-          toast({
-            title: "Insufficient Credits",
-            description: user?.isPremium 
-              ? "An error occurred while processing your request." 
-              : "You've reached your daily limit. Upgrade to premium for unlimited watermarks!",
-            variant: "destructive",
-          });
-          return;
-        }
-        throw new Error(error.error || "Failed to process watermark");
+        throw new Error("Failed to process watermark");
       }
 
       const result = await response.blob();
@@ -82,50 +68,14 @@ export function WatermarkTool() {
     }
   };
 
-  // If user is not authenticated, show the auth form
-  if (!user) {
-    return <AuthForm />;
-  }
-
   return (
     <Card>
       <CardContent className="pt-6">
-        <div className="flex justify-between items-start mb-6">
-          <div>
-            <h2 className="text-xl font-semibold">Watermark Tool</h2>
-            <p className="text-sm text-muted-foreground mt-1">
-              Add professional watermarks to your images and videos
-            </p>
-          </div>
-          <div className="text-right">
-            <div className="flex items-center gap-2">
-              {user.isPremium && (
-                <div className="flex items-center text-primary">
-                  <CrownIcon className="w-4 h-4 mr-1" />
-                  <span className="text-sm font-medium">Premium</span>
-                </div>
-              )}
-            </div>
-            {!user.isPremium && (
-              <div className="mt-2">
-                <p className="text-sm font-medium mb-1">Credits Remaining:</p>
-                <div className="flex items-center gap-2">
-                  <ImageIcon className="w-4 h-4" />
-                  <span className="text-sm">{user.credits.image}</span>
-                  <VideoIcon className="w-4 h-4 ml-2" />
-                  <span className="text-sm">{user.credits.video}</span>
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="mt-2"
-                  onClick={() => {/* TODO: Implement upgrade flow */}}
-                >
-                  Upgrade to Premium
-                </Button>
-              </div>
-            )}
-          </div>
+        <div className="mb-6">
+          <h2 className="text-xl font-semibold">Watermark Tool</h2>
+          <p className="text-sm text-muted-foreground mt-1">
+            Add professional watermarks to your images and videos
+          </p>
         </div>
 
         <Form {...form}>
