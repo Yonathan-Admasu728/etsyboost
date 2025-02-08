@@ -9,7 +9,6 @@ import ffmpeg from "fluent-ffmpeg";
 import { v4 as uuidv4 } from "uuid";
 import path from "path";
 import fs from "fs/promises";
-import { setupAuth } from "./auth";
 
 // Ensure uploads directory exists
 const uploadsDir = path.join(process.cwd(), "uploads");
@@ -22,14 +21,6 @@ const upload = multer({
     fileSize: 50 * 1024 * 1024, // 50MB limit
   },
 });
-
-// Middleware to check authentication
-function isAuthenticated(req: Express.Request, res: Express.Response, next: Express.NextFunction) {
-  if (req.isAuthenticated()) {
-    return next();
-  }
-  res.status(401).json({ error: "Authentication required" });
-}
 
 // Helper function to convert position to Sharp gravity
 function getGravity(position: string): sharp.Gravity {
@@ -44,9 +35,6 @@ function getGravity(position: string): sharp.Gravity {
 }
 
 export function registerRoutes(app: Express): Server {
-  // Set up authentication routes
-  setupAuth(app);
-
   // Public route - Generate tags
   app.post("/api/generate-tags", async (req, res) => {
     try {
@@ -62,14 +50,12 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Protected route - Watermark
-  app.post("/api/watermark", isAuthenticated, upload.single("file"), async (req, res) => {
+  // Public route - Watermark
+  app.post("/api/watermark", upload.single("file"), async (req, res) => {
     try {
       if (!req.file) {
         return res.status(400).json({ error: "No file uploaded" });
       }
-
-      const user = req.user!;
 
       // Detect file type
       const fileType = await fileTypeFromBuffer(req.file.buffer);
@@ -82,23 +68,6 @@ export function registerRoutes(app: Express): Server {
 
       if (!isVideo && !isImage) {
         return res.status(400).json({ error: "Unsupported file type" });
-      }
-
-      // Check credits
-      if (isImage && user.credits.image <= 0 && !user.isPremium) {
-        return res.status(403).json({ 
-          error: "Insufficient image credits",
-          type: "credits_exceeded",
-          remaining: user.credits.image,
-          nextRefresh: user.credits.lastImageRefresh
-        });
-      }
-      if (isVideo && user.credits.video <= 0 && !user.isPremium) {
-        return res.status(403).json({ 
-          error: "Insufficient video credits",
-          type: "credits_exceeded",
-          remaining: user.credits.video
-        });
       }
 
       // Process watermark
@@ -123,17 +92,12 @@ export function registerRoutes(app: Express): Server {
           }])
           .toBuffer();
 
-        // Deduct credit if not premium
-        if (!user.isPremium) {
-          await storage.deductImageCredit(user.id);
-        }
-
         // Store watermark record
         await storage.createWatermark({
           type: "image",
           originalFile: req.file.originalname,
           watermarkedFile: outputFileName,
-          userId: user.id
+          userId: 1 // Default user ID since we removed auth
         });
 
         // Send the watermarked image
@@ -169,17 +133,12 @@ export function registerRoutes(app: Express): Server {
         // Clean up temp file
         await fs.unlink(inputPath);
 
-        // Deduct credit if not premium
-        if (!user.isPremium) {
-          await storage.deductVideoCredit(user.id);
-        }
-
         // Store watermark record
         await storage.createWatermark({
           type: "video",
           originalFile: req.file.originalname,
           watermarkedFile: outputFileName,
-          userId: user.id
+          userId: 1 // Default user ID since we removed auth
         });
 
         // Send the watermarked video
