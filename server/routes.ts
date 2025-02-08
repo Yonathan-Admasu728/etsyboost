@@ -22,16 +22,14 @@ const upload = multer({
   },
 });
 
-// Helper function to convert position to Sharp gravity
-function getGravity(position: string): sharp.Gravity {
-  switch (position) {
-    case "top-left": return "northwest";
-    case "top-right": return "northeast";
-    case "bottom-left": return "southwest";
-    case "bottom-right": return "southeast";
-    case "center": return "center";
-    default: return "southeast";
-  }
+// Helper function to create watermark text SVG
+function createWatermarkSvg(text: string, opacity: number) {
+  return Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="200" height="50">
+    <text x="50%" y="50%" text-anchor="middle" alignment-baseline="middle" 
+          font-family="Arial" font-size="24" fill="rgba(255,255,255,${opacity})">
+      ${text}
+    </text>
+  </svg>`);
 }
 
 export function registerRoutes(app: Express): Server {
@@ -72,24 +70,39 @@ export function registerRoutes(app: Express): Server {
 
       // Process watermark
       const watermarkText = req.body.watermarkText;
-      const position = req.body.position;
       const opacity = parseFloat(req.body.opacity);
 
       const outputFileName = `${uuidv4()}.${fileType.ext}`;
       const outputPath = path.join(uploadsDir, outputFileName);
 
       if (isImage) {
+        // Get image dimensions
+        const metadata = await sharp(req.file.buffer).metadata();
+        const width = metadata.width || 800;
+        const height = metadata.height || 600;
+
+        // Calculate grid size based on image dimensions
+        const gridCols = Math.ceil(width / 300); // One watermark every 300px
+        const gridRows = Math.ceil(height / 200); // One watermark every 200px
+
+        // Create array of watermark positions
+        const watermarks = [];
+        const watermarkSvg = createWatermarkSvg(watermarkText, opacity);
+
+        // Create a grid pattern of watermarks
+        for (let row = 0; row < gridRows; row++) {
+          for (let col = 0; col < gridCols; col++) {
+            watermarks.push({
+              input: watermarkSvg,
+              gravity: "northwest" as const,
+              top: row * 200 + 50,  // Add some padding
+              left: col * 300 + 50, // Add some padding
+            });
+          }
+        }
+
         const watermarkedImage = await sharp(req.file.buffer)
-          .composite([{
-            input: Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="500" height="50">
-              <text x="50%" y="50%" text-anchor="middle" alignment-baseline="middle" 
-                    font-family="Arial" font-size="24" fill="rgba(255,255,255,${opacity})">
-                ${watermarkText}
-              </text>
-            </svg>`),
-            blend: 'over',
-            gravity: getGravity(position),
-          }])
+          .composite(watermarks)
           .toBuffer();
 
         // Send the watermarked image
@@ -101,22 +114,38 @@ export function registerRoutes(app: Express): Server {
         const inputPath = path.join(uploadsDir, `input-${outputFileName}`);
         await fs.writeFile(inputPath, req.file.buffer);
 
-        // Add watermark using ffmpeg
+        // Create multiple watermark positions
+        const positions = [
+          { x: '10', y: '10' },                    // Top-left
+          { x: 'w-tw-10', y: '10' },               // Top-right
+          { x: '10', y: 'h-th-10' },               // Bottom-left
+          { x: 'w-tw-10', y: 'h-th-10' },          // Bottom-right
+          { x: '(w-tw)/2', y: '(h-th)/2' },        // Center
+          { x: '(w-tw)/2', y: '10' },              // Top-center
+          { x: '(w-tw)/2', y: 'h-th-10' },         // Bottom-center
+          { x: '10', y: '(h-th)/2' },              // Left-center
+          { x: 'w-tw-10', y: '(h-th)/2' }          // Right-center
+        ];
+
+        // Create video filters array for each position
+        const videoFilters = positions.map(pos => ({
+          filter: 'drawtext',
+          options: {
+            text: watermarkText,
+            fontsize: '24',
+            fontcolor: `white@${opacity}`,
+            x: pos.x,
+            y: pos.y,
+            box: '1',
+            boxcolor: 'black@0.4',
+            boxborderw: '5',
+          }
+        }));
+
+        // Add watermark using ffmpeg with multiple positions
         await new Promise<void>((resolve, reject) => {
           ffmpeg(inputPath)
-            .videoFilters([{
-              filter: 'drawtext',
-              options: {
-                text: watermarkText,
-                fontsize: '24',
-                fontcolor: `white@${opacity}`,
-                x: position.includes('right') ? 'w-tw-10' : '10',
-                y: position.includes('bottom') ? 'h-th-10' : '10',
-                box: '1',
-                boxcolor: 'black@0.4',
-                boxborderw: '5',
-              }
-            }])
+            .videoFilters(videoFilters)
             .save(outputPath)
             .on('end', () => resolve())
             .on('error', reject);
