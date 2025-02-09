@@ -3,6 +3,10 @@ import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
+import session from "express-session";
+import Redis from "ioredis";
+import { RedisStore } from "connect-redis";
+import MemoryStore from "memorystore";
 
 const app = express();
 
@@ -32,10 +36,14 @@ app.use(helmet({
 
 // CORS setup
 app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*.replit.dev');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-  res.header('Access-Control-Allow-Credentials', 'true');
+  const origin = req.get('origin');
+  if (origin && origin.endsWith('.replit.dev')) {
+    res.header('Access-Control-Allow-Origin', origin);
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+    res.header('Access-Control-Allow-Credentials', 'true');
+  }
+
   if (req.method === 'OPTIONS') {
     return res.sendStatus(200);
   }
@@ -50,6 +58,46 @@ const limiter = rateLimit({
   legacyHeaders: false,
 });
 app.use(limiter);
+
+// Session configuration
+const MemoryStoreSession = MemoryStore(session);
+let sessionStore: session.Store;
+
+try {
+  const redis = new Redis({
+    host: process.env.REDIS_HOST || 'localhost',
+    port: Number(process.env.REDIS_PORT) || 6379,
+    maxRetriesPerRequest: 1,
+    retryStrategy: () => null // Disable retries
+  });
+
+  redis.on('error', (err) => {
+    console.log('Redis connection error, falling back to MemoryStore:', err.message);
+    if (!sessionStore || !(sessionStore instanceof MemoryStoreSession)) {
+      sessionStore = new MemoryStoreSession({
+        checkPeriod: 86400000 // prune expired entries every 24h
+      });
+    }
+  });
+
+  sessionStore = new RedisStore({ client: redis });
+} catch (err) {
+  console.log('Failed to initialize Redis, using MemoryStore:', (err as Error).message);
+  sessionStore = new MemoryStoreSession({
+    checkPeriod: 86400000 // prune expired entries every 24h
+  });
+}
+
+app.use(session({
+  store: sessionStore,
+  secret: process.env.SESSION_SECRET || 'your-secret-key',
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: app.get('env') === 'production',
+    maxAge: 24 * 60 * 60 * 1000 // 24 hours
+  }
+}));
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
