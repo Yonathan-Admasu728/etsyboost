@@ -32,6 +32,7 @@ import { WatermarkTool } from "@/components/ui/WatermarkTool";
 import { apiRequest } from "@/lib/queryClient";
 import { Loader2Icon, CopyIcon, CheckIcon, ListIcon, GridIcon } from "lucide-react";
 import { SEO } from "@/components/ui/seo";
+import { SocialPostGenerator } from "@/components/ui/SocialPostGenerator";
 
 const categories = [
   "Jewelry",
@@ -46,7 +47,6 @@ const categories = [
 type ViewMode = "list" | "heatmap";
 
 export default function Tool() {
-  // Get the tab from URL parameters
   const searchParams = new URLSearchParams(window.location.search);
   const initialTab = searchParams.get('tab') || 'tags';
 
@@ -62,16 +62,18 @@ export default function Tool() {
           "etsy color palette",
           "etsy seller tools",
           "etsy shop optimization",
-          "free etsy tools"
+          "free etsy tools",
+          "social media generator"
         ]}
       />
       <div className="min-h-screen bg-background">
         <div className="container mx-auto px-4 py-8">
           <Tabs defaultValue={initialTab} className="w-full">
-            <TabsList className="grid w-full grid-cols-3">
+            <TabsList className="grid w-full grid-cols-4">
               <TabsTrigger value="tags">Tag Generator</TabsTrigger>
               <TabsTrigger value="watermark">Watermark Tool</TabsTrigger>
               <TabsTrigger value="branding">Brand Colors</TabsTrigger>
+              <TabsTrigger value="social">Social Posts</TabsTrigger>
             </TabsList>
 
             <TabsContent value="tags">
@@ -91,6 +93,13 @@ export default function Tool() {
                 <AdPlacement />
               </div>
             </TabsContent>
+
+            <TabsContent value="social">
+              <div className="space-y-8">
+                <SocialPostGenerator />
+                <AdPlacement />
+              </div>
+            </TabsContent>
           </Tabs>
         </div>
       </div>
@@ -98,7 +107,6 @@ export default function Tool() {
   );
 }
 
-// Separate the tag generator into its own component for better organization
 function TagGenerator() {
   const { toast } = useToast();
   const [results, setResults] = useState<{ tags: ScoredTag[], seoTips: string[] } | null>(null);
@@ -139,7 +147,6 @@ function TagGenerator() {
     mutation.mutate(data);
   };
 
-  // Helper function to get tag color based on score
   const getTagColor = (score: number) => {
     if (score >= 9) return "bg-primary/20 text-primary border-primary";
     if (score >= 7) return "bg-accent/20 text-accent-foreground border-accent";

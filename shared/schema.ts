@@ -58,6 +58,27 @@ export const adImpressions = pgTable("ad_impressions", {
   lastImpressionAt: timestamp("last_impression_at").defaultNow().notNull(),
 });
 
+// Add social media post tables to existing schema
+export const socialPosts = pgTable("social_posts", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => users.id),
+  title: varchar("title", { length: 100 }).notNull(),
+  description: text("description").notNull(),
+  imageUrl: varchar("image_url", { length: 255 }),
+  platform: varchar("platform", { length: 50 }).notNull(), // 'instagram', 'facebook', 'pinterest'
+  tags: json("tags").$type<Array<{ text: string, score: number, emoji: string }>>(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const postTemplates = pgTable("post_templates", {
+  id: serial("id").primaryKey(),
+  name: varchar("name", { length: 100 }).notNull(),
+  template: text("template").notNull(),
+  platform: varchar("platform", { length: 50 }).notNull(),
+  variables: json("variables").$type<string[]>().notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 // Create insert schemas
 export const insertListingSchema = createInsertSchema(listings).pick({
   title: true,
@@ -107,6 +128,20 @@ export const insertAdImpressionSchema = createInsertSchema(adImpressions).pick({
   size: true,
 });
 
+export const insertSocialPostSchema = createInsertSchema(socialPosts)
+  .pick({
+    title: true,
+    description: true,
+    platform: true,
+    tags: true,
+  })
+  .extend({
+    imageFile: z.instanceof(File).optional(),
+  });
+
+export const insertPostTemplateSchema = createInsertSchema(postTemplates);
+
+
 // Export types
 export type Listing = typeof listings.$inferSelect;
 export type InsertListing = z.infer<typeof insertListingSchema>;
@@ -127,6 +162,11 @@ export type InsertToolUsage = z.infer<typeof insertToolUsageSchema>;
 export type InsertPageView = z.infer<typeof insertPageViewSchema>;
 export type InsertAdImpression = z.infer<typeof insertAdImpressionSchema>;
 
+export type SocialPost = typeof socialPosts.$inferSelect;
+export type InsertSocialPost = z.infer<typeof insertSocialPostSchema>;
+
+export type PostTemplate = typeof postTemplates.$inferSelect;
+export type InsertPostTemplate = z.infer<typeof insertPostTemplateSchema>;
 
 // Validation schemas
 export const generateTagsSchema = z.object({
@@ -150,3 +190,18 @@ export type ScoredTag = {
   score: number;
   emoji: string;
 };
+
+// Add validation schema for social post generation
+export const generateSocialPostSchema = z.object({
+  platform: z.enum(["instagram", "facebook", "pinterest"]),
+  title: z.string().min(5).max(100),
+  description: z.string().min(10),
+  tags: z.array(z.object({
+    text: z.string(),
+    score: z.number(),
+    emoji: z.string()
+  })).optional(),
+  templateId: z.number().optional(),
+});
+
+export type GenerateSocialPostRequest = z.infer<typeof generateSocialPostSchema>;
