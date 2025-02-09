@@ -4,8 +4,11 @@ import { Link } from "wouter";
 import { AdPlacement } from "@/components/ui/AdPlacement";
 import { RocketIcon, TagIcon, ImageIcon, PaletteIcon } from "lucide-react";
 import { SEO } from "@/components/ui/seo";
+import { useAnalytics } from "@/hooks/use-analytics";
 
 export default function Home() {
+  const { stats, isLoading } = useAnalytics();
+
   return (
     <>
       <SEO 
@@ -30,7 +33,20 @@ export default function Home() {
             <p className="text-xl text-muted-foreground mb-8">
               Free Tools for Etsy Sellers
             </p>
+            {!isLoading && stats && (
+              <div className="flex justify-center gap-8 text-sm text-muted-foreground">
+                <div>
+                  <span className="font-bold text-primary">{stats.totalImpressions.toLocaleString()}</span>{" "}
+                  Seller Tools Used
+                </div>
+                <div>
+                  <span className="font-bold text-primary">100%</span> Free Forever
+                </div>
+              </div>
+            )}
           </header>
+
+          <AdPlacement position="top" size="large" />
 
           <div className="grid md:grid-cols-3 gap-8 mb-16">
             <Card className="relative overflow-hidden group">
@@ -82,7 +98,26 @@ export default function Home() {
             </Card>
           </div>
 
-          <AdPlacement className="mt-8" />
+          <AdPlacement position="bottom" size="medium" />
+
+          {!isLoading && stats?.toolStats && (
+            <div className="mt-16">
+              <h2 className="text-2xl font-semibold mb-4 text-center">Most Popular Tools</h2>
+              <div className="grid md:grid-cols-3 gap-8">
+                {stats.toolStats.map((stat) => (
+                  <div key={stat.toolType} className="p-4 rounded-lg bg-accent/10">
+                    <h3 className="font-medium mb-2 capitalize">
+                      {stat.toolType.replace("-", " ")}
+                    </h3>
+                    <p className="text-2xl font-bold text-primary">
+                      {stat.totalUses.toLocaleString()}
+                    </p>
+                    <p className="text-sm text-muted-foreground">Total Uses</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </>

@@ -35,6 +35,29 @@ export const watermarks = pgTable("watermarks", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// Add analytics tables
+export const toolUsage = pgTable("tool_usage", {
+  id: serial("id").primaryKey(),
+  toolType: varchar("tool_type", { length: 50 }).notNull(), // 'watermark', 'tags', 'branding'
+  totalUses: integer("total_uses").default(0).notNull(),
+  lastUsedAt: timestamp("last_used_at").defaultNow().notNull(),
+});
+
+export const pageViews = pgTable("page_views", {
+  id: serial("id").primaryKey(),
+  path: varchar("path", { length: 255 }).notNull(),
+  views: integer("views").default(0).notNull(),
+  lastViewedAt: timestamp("last_viewed_at").defaultNow().notNull(),
+});
+
+export const adImpressions = pgTable("ad_impressions", {
+  id: serial("id").primaryKey(),
+  position: varchar("position", { length: 50 }).notNull(),
+  size: varchar("size", { length: 50 }).notNull(),
+  impressions: integer("impressions").default(0).notNull(),
+  lastImpressionAt: timestamp("last_impression_at").defaultNow().notNull(),
+});
+
 // Create insert schemas
 export const insertListingSchema = createInsertSchema(listings).pick({
   title: true,
@@ -70,6 +93,20 @@ export const insertWatermarkSchema = createInsertSchema(watermarks)
     watermarkedFile: z.string(),
   });
 
+// Add new insert schemas
+export const insertToolUsageSchema = createInsertSchema(toolUsage).pick({
+  toolType: true,
+});
+
+export const insertPageViewSchema = createInsertSchema(pageViews).pick({
+  path: true,
+});
+
+export const insertAdImpressionSchema = createInsertSchema(adImpressions).pick({
+  position: true,
+  size: true,
+});
+
 // Export types
 export type Listing = typeof listings.$inferSelect;
 export type InsertListing = z.infer<typeof insertListingSchema>;
@@ -80,6 +117,16 @@ export type LoginUser = z.infer<typeof loginUserSchema>;
 
 export type Watermark = typeof watermarks.$inferSelect;
 export type InsertWatermark = z.infer<typeof insertWatermarkSchema>;
+
+// Add new types
+export type ToolUsage = typeof toolUsage.$inferSelect;
+export type PageView = typeof pageViews.$inferSelect;
+export type AdImpression = typeof adImpressions.$inferSelect;
+
+export type InsertToolUsage = z.infer<typeof insertToolUsageSchema>;
+export type InsertPageView = z.infer<typeof insertPageViewSchema>;
+export type InsertAdImpression = z.infer<typeof insertAdImpressionSchema>;
+
 
 // Validation schemas
 export const generateTagsSchema = z.object({

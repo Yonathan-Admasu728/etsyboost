@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { generateTagsSchema, watermarkValidationSchema } from "@shared/schema";
+import { generateTagsSchema, watermarkValidationSchema, toolUsage, pageViews, adImpressions } from "@shared/schema";
 import multer from "multer";
 import { fileTypeFromBuffer } from "file-type";
 import sharp from "sharp";
@@ -11,6 +11,8 @@ import path from "path";
 import fs from "fs/promises";
 import crypto from "crypto";
 import { CacheService } from "./services/cache";
+import { db } from "./db";
+import { eq, sql } from "drizzle-orm";
 
 // Ensure uploads directory exists
 const uploadsDir = path.join(process.cwd(), "uploads");
@@ -250,6 +252,88 @@ export function registerRoutes(app: Express): Server {
     } catch (error) {
       console.error("Watermark error:", error);
       res.status(500).json({ error: "Failed to process watermark" });
+    }
+  });
+
+  // Add analytics endpoints
+  app.post("/api/analytics/impression", async (req, res) => {
+    try {
+      const { position, size } = req.body;
+
+      // Update impressions count
+      await db
+        .insert(adImpressions)
+        .values({
+          position,
+          size,
+          impressions: 1,
+          lastImpressionAt: new Date(),
+        })
+        .onConflictDoUpdate({
+          target: [adImpressions.position, adImpressions.size],
+          set: {
+            impressions: sql`${adImpressions.impressions} + 1`,
+            lastImpressionAt: new Date(),
+          },
+        });
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Ad impression error:", error);
+      res.status(500).json({ error: "Failed to log impression" });
+    }
+  });
+
+  app.post("/api/analytics/tool-usage", async (req, res) => {
+    try {
+      const { toolType } = req.body;
+
+      // Update tool usage count
+      await db
+        .insert(toolUsage)
+        .values({
+          toolType,
+          totalUses: 1,
+          lastUsedAt: new Date(),
+        })
+        .onConflictDoUpdate({
+          target: [toolUsage.toolType],
+          set: {
+            totalUses: sql`${toolUsage.totalUses} + 1`,
+            lastUsedAt: new Date(),
+          },
+        });
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Tool usage error:", error);
+      res.status(500).json({ error: "Failed to log tool usage" });
+    }
+  });
+
+  app.get("/api/analytics/stats", async (req, res) => {
+    try {
+      const toolStats = await db
+        .select({
+          toolType: toolUsage.toolType,
+          totalUses: toolUsage.totalUses,
+        })
+        .from(toolUsage)
+        .orderBy(toolUsage.totalUses);
+
+      const totalImpressions = await db
+        .select({
+          total: sql<number>`sum(${adImpressions.impressions})`,
+        })
+        .from(adImpressions);
+
+      res.json({
+        toolStats,
+        totalImpressions: totalImpressions[0]?.total || 0,
+      });
+    } catch (error) {
+      console.error("Stats error:", error);
+      res.status(500).json({ error: "Failed to fetch stats" });
     }
   });
 
