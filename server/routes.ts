@@ -44,38 +44,73 @@ async function generateFileHash(buffer: Buffer): Promise<string> {
 export function registerRoutes(app: Express): Server {
   app.post("/api/generate-tags", async (req, res) => {
     try {
+      console.log("[Tags] Starting tag generation");
+
       const validation = generateTagsSchema.safeParse(req.body);
       if (!validation.success) {
-        return res.status(400).json({ error: "Invalid input" });
+        console.error("[Tags] Validation failed:", validation.error);
+        return res.status(400).json({ error: "Invalid input", details: validation.error.errors });
       }
 
       const { title, description, category } = validation.data;
+      console.log("[Tags] Processing request for:", { title, category });
+
       const cacheKey = CacheService.generateTagKey(title, description, category);
 
       // Try to get from cache first
-      const cachedResult = await CacheService.get(cacheKey);
-      if (cachedResult) {
-        console.log("[Cache] Hit - Tags");
-        return res.json(cachedResult);
+      try {
+        const cachedResult = await CacheService.get(cacheKey);
+        if (cachedResult) {
+          console.log("[Tags] Cache hit");
+          return res.json(cachedResult);
+        }
+      } catch (err) {
+        console.error("[Tags] Cache error:", err);
+        // Continue without cache
       }
 
-      console.log("[Cache] Miss - Tags");
+      console.log("[Tags] Cache miss - generating tags");
       const result = await storage.generateTags(validation.data);
 
       // Cache the result
-      await CacheService.set(cacheKey, result);
+      try {
+        await CacheService.set(cacheKey, result);
+        console.log("[Tags] Cached generated tags");
+      } catch (err) {
+        console.error("[Tags] Failed to cache result:", err);
+      }
 
+      console.log("[Tags] Sending response");
       res.json(result);
     } catch (error) {
-      console.error("Generate tags error:", error);
+      console.error("[Tags] Generate tags error:", error);
       res.status(500).json({ error: "Failed to generate tags" });
     }
   });
 
   app.post("/api/watermark", upload.single("file"), async (req, res) => {
     try {
+      console.log("[Watermark] Starting watermark process");
+
       if (!req.file) {
+        console.error("[Watermark] No file uploaded");
         return res.status(400).json({ error: "No file uploaded" });
+      }
+
+      // Log file details
+      console.log("[Watermark] File received:", {
+        originalname: req.file.originalname,
+        mimetype: req.file.mimetype,
+        size: req.file.size
+      });
+
+      // Ensure uploads directory exists
+      try {
+        await fs.mkdir(uploadsDir, { recursive: true });
+        console.log("[Watermark] Uploads directory verified");
+      } catch (err) {
+        console.error("[Watermark] Failed to create uploads directory:", err);
+        return res.status(500).json({ error: "Server configuration error" });
       }
 
       // Generate file hash for caching
@@ -83,6 +118,12 @@ export function registerRoutes(app: Express): Server {
       const watermarkText = req.body.watermarkText;
       const position = req.body.position;
       const opacity = parseFloat(req.body.opacity);
+
+      console.log("[Watermark] Processing parameters:", {
+        textLength: watermarkText?.length,
+        position,
+        opacity
+      });
 
       const cacheKey = CacheService.generateWatermarkKey(
         fileHash,
@@ -92,20 +133,26 @@ export function registerRoutes(app: Express): Server {
       );
 
       // Try to get from cache first
-      const cachedResult = await CacheService.getBinary(cacheKey);
-      if (cachedResult) {
-        console.log("[Cache] Hit - Watermark");
-        const fileType = await fileTypeFromBuffer(cachedResult);
-        res.setHeader('Content-Type', fileType?.mime || 'application/octet-stream');
-        res.setHeader('Content-Disposition', `attachment; filename="watermarked.${fileType?.ext || 'file'}"`);
-        return res.send(cachedResult);
+      try {
+        const cachedResult = await CacheService.getBinary(cacheKey);
+        if (cachedResult) {
+          console.log("[Watermark] Cache hit");
+          const fileType = await fileTypeFromBuffer(cachedResult);
+          res.setHeader('Content-Type', fileType?.mime || 'application/octet-stream');
+          res.setHeader('Content-Disposition', `attachment; filename="watermarked.${fileType?.ext || 'file'}"`);
+          return res.send(cachedResult);
+        }
+      } catch (err) {
+        console.error("[Watermark] Cache error:", err);
+        // Continue without cache
       }
 
-      console.log("[Cache] Miss - Watermark");
+      console.log("[Watermark] Cache miss - processing file");
 
       // Detect file type
       const fileType = await fileTypeFromBuffer(req.file.buffer);
       if (!fileType) {
+        console.error("[Watermark] Invalid file type");
         return res.status(400).json({ error: "Invalid file type" });
       }
 
@@ -113,6 +160,7 @@ export function registerRoutes(app: Express): Server {
       const isImage = fileType.mime.startsWith("image");
 
       if (!isVideo && !isImage) {
+        console.error("[Watermark] Unsupported file type:", fileType.mime);
         return res.status(400).json({ error: "Unsupported file type" });
       }
 
@@ -121,68 +169,42 @@ export function registerRoutes(app: Express): Server {
       const outputPath = path.join(uploadsDir, outputFileName);
 
       if (isImage) {
-        // Get image dimensions
-        const metadata = await sharp(req.file.buffer).metadata();
-        const width = metadata.width || 800;
-        const height = metadata.height || 600;
+        try {
+          console.log("[Watermark] Processing image");
+          // Get image dimensions
+          const metadata = await sharp(req.file.buffer).metadata();
+          const width = metadata.width || 800;
+          const height = metadata.height || 600;
 
-        // Calculate grid size based on image dimensions (more dense grid)
-        const gridCols = Math.ceil(width / 200); // One watermark every 200px
-        const gridRows = Math.ceil(height / 150); // One watermark every 150px
+          // Create watermark SVG
+          const watermarkSvg = createWatermarkSvg(watermarkText, opacity);
 
-        // Create array of watermark positions
-        const watermarks = [];
-        const watermarkSvg = createWatermarkSvg(watermarkText, opacity);
-
-        // Create a dense grid pattern of watermarks
-        for (let row = 0; row < gridRows; row++) {
-          for (let col = 0; col < gridCols; col++) {
-            // Add regular grid watermark
-            watermarks.push({
+          // Single watermark for testing
+          const watermarkedImage = await sharp(req.file.buffer)
+            .composite([{
               input: watermarkSvg,
-              gravity: "northwest" as const,
-              top: Math.round(row * 150 + 25),
-              left: Math.round(col * 200 + 25),
-            });
+              gravity: position === 'center' ? 'center' : position,
+            }])
+            .toBuffer();
 
-            // Add diagonal watermarks in between
-            if (row < gridRows - 1 && col < gridCols - 1) {
-              watermarks.push({
-                input: watermarkSvg,
-                gravity: "northwest" as const,
-                top: Math.round(row * 150 + 100),
-                left: Math.round(col * 200 + 125),
-              });
-            }
+          // Cache the result before sending
+          try {
+            await CacheService.setBinary(cacheKey, watermarkedImage);
+            console.log("[Watermark] Cached processed image");
+          } catch (err) {
+            console.error("[Watermark] Failed to cache result:", err);
           }
+
+          console.log("[Watermark] Sending processed image");
+          res.setHeader('Content-Type', fileType.mime);
+          res.setHeader('Content-Disposition', `attachment; filename="watermarked.${fileType.ext}"`);
+          return res.send(watermarkedImage);
+        } catch (err) {
+          console.error("[Watermark] Image processing error:", err);
+          return res.status(500).json({ error: "Failed to process image" });
         }
-
-        // Add central watermarks for extra coverage
-        const centerWatermarks = [
-          { top: Math.round(height / 2 - 20), left: Math.round(width / 2 - 75) },
-          { top: Math.round(height / 3 - 20), left: Math.round(width / 3 - 75) },
-          { top: Math.round((2 * height) / 3 - 20), left: Math.round((2 * width) / 3 - 75) },
-        ];
-
-        centerWatermarks.forEach(pos => {
-          watermarks.push({
-            input: watermarkSvg,
-            gravity: "northwest" as const,
-            ...pos,
-          });
-        });
-
-        const watermarkedImage = await sharp(req.file.buffer)
-          .composite(watermarks)
-          .toBuffer();
-
-        // Cache the result before sending
-        await CacheService.setBinary(cacheKey, watermarkedImage);
-
-        res.setHeader('Content-Type', fileType.mime);
-        res.setHeader('Content-Disposition', `attachment; filename="watermarked.${fileType.ext}"`);
-        res.send(watermarkedImage);
       } else if (isVideo) {
+        console.log("[Watermark] Processing video");
         // Save temp video file
         const inputPath = path.join(uploadsDir, `input-${outputFileName}`);
         await fs.writeFile(inputPath, req.file.buffer);
@@ -250,7 +272,7 @@ export function registerRoutes(app: Express): Server {
         await fs.unlink(outputPath);
       }
     } catch (error) {
-      console.error("Watermark error:", error);
+      console.error("[Watermark] Unexpected error:", error);
       res.status(500).json({ error: "Failed to process watermark" });
     }
   });
