@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { generateTagsSchema, watermarkValidationSchema, toolUsage, pageViews, adImpressions } from "@shared/schema";
+import { generateTagsSchema, watermarkValidationSchema, toolUsage, pageViews, adImpressions, generateSocialPostSchema } from "@shared/schema";
 import multer from "multer";
 import { fileTypeFromBuffer } from "file-type";
 import sharp from "sharp";
@@ -285,6 +285,35 @@ export function registerRoutes(app: Express): Server {
     } catch (error) {
       console.error("Stats error:", error);
       res.status(500).json({ error: "Failed to fetch stats" });
+    }
+  });
+
+  app.post("/api/social/generate-post", async (req, res) => {
+    try {
+      const validation = generateSocialPostSchema.safeParse(req.body);
+      if (!validation.success) {
+        return res.status(400).json({ error: "Invalid input" });
+      }
+
+      const { title, description, platform, tags } = validation.data;
+
+      // For now, return a mock response with the input data
+      // This will be replaced with actual AI-generated content later
+      const generatedPost = {
+        platform,
+        title,
+        description,
+        tags: tags || [
+          { text: "etsy", score: 9.5, emoji: "🛍️" },
+          { text: "handmade", score: 9.0, emoji: "🎨" },
+          { text: "shopsmall", score: 8.5, emoji: "💝" }
+        ]
+      };
+
+      res.json(generatedPost);
+    } catch (error) {
+      console.error("Social post generation error:", error);
+      res.status(500).json({ error: "Failed to generate social post" });
     }
   });
 
