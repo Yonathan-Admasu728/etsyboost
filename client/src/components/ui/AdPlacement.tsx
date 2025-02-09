@@ -16,18 +16,18 @@ export function AdPlacement({
 }: AdPlacementProps) {
   const [impressionLogged, setImpressionLogged] = useState(false);
 
-  // Get size classes based on the size prop
+  // Reduced height for each size
   const sizeClasses = {
-    small: "h-[90px]",
-    medium: "h-[120px]",
-    large: "h-[250px]",
+    small: "h-[60px]", // Reduced from 90px
+    medium: "h-[90px]", // Reduced from 120px
+    large: "h-[180px]", // Reduced from 250px
   };
 
-  // Get position classes
+  // Adjusted padding and margin
   const positionClasses = {
-    top: "mt-0 mb-8",
-    bottom: "mt-8 mb-0",
-    inline: "my-8",
+    top: "mt-2 mb-6", // Reduced top margin
+    bottom: "mt-6 mb-2",
+    inline: "my-6",
   };
 
   // Log impression mutation
@@ -70,13 +70,13 @@ export function AdPlacement({
     <div 
       id={`ad-${position}-${size}`}
       className={cn(
-        "w-full bg-accent/20 rounded-lg flex items-center justify-center relative overflow-hidden",
+        "w-full bg-accent/10 rounded-lg flex items-center justify-center relative overflow-hidden border border-accent/20 backdrop-blur-sm",
         sizeClasses[size],
         positionClasses[position],
         className
       )}
     >
-      <span className="text-muted-foreground">Advertisement</span>
+      <span className="text-sm text-muted-foreground/70">Advertisement</span>
       {/* Future: Add actual ad code here */}
     </div>
   );
