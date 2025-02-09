@@ -12,16 +12,23 @@ export default function Home() {
   return (
     <>
       <SEO 
-        title="EtsyBoost - Free Etsy Tools for Sellers"
-        description="Boost your Etsy shop with our free seller tools. Generate optimized tags, create watermarks, and design brand color palettes to enhance your listings."
+        title="EtsyBoost - Free Etsy Tools for Sellers | Tags, Watermarks & Social Media"
+        description="Boost your Etsy shop with our comprehensive seller tools. Generate optimized tags, create watermarks, design social media posts, and enhance your brand with color palettes."
         keywords={[
           "etsy tags",
           "etsy seo",
           "etsy watermark",
           "etsy branding",
-          "etsy color palette",
+          "etsy social media",
+          "etsy instagram posts",
+          "etsy facebook marketing",
+          "etsy pinterest strategy",
+          "etsy post generator",
           "etsy seller tools",
-          "free etsy tools"
+          "free etsy tools",
+          "etsy marketing tools",
+          "etsy social media tools",
+          "etsy shop optimization"
         ]}
       />
       <div className="min-h-screen bg-gradient-to-b from-background to-accent/10">

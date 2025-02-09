@@ -12,6 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { Loader2Icon, Share2Icon, InstagramIcon, FacebookIcon } from "lucide-react";
 import { SiPinterest } from "react-icons/si";
+import { SEO } from "@/components/ui/seo";
 import {
   Select,
   SelectContent,
@@ -110,97 +111,115 @@ export function SocialPostGenerator() {
   };
 
   return (
-    <div className="space-y-8">
-      <Card>
-        <CardContent className="pt-6">
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-              <FormField
-                control={form.control}
-                name="platform"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Platform</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+    <>
+      <SEO
+        title="Etsy Social Media Post Generator - Create Engaging Content"
+        description="Create optimized social media posts for your Etsy shop. Generate engaging content for Instagram, Facebook, and Pinterest with our AI-powered tool."
+        keywords={[
+          "etsy social media",
+          "etsy instagram posts",
+          "etsy facebook content",
+          "etsy pinterest pins",
+          "social media generator",
+          "etsy marketing tool",
+          "etsy content creator",
+          "social media optimization",
+          "etsy hashtags",
+          "etsy post templates"
+        ]}
+      />
+      <div className="space-y-8">
+        <Card>
+          <CardContent className="pt-6">
+            <Form {...form}>
+              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+                <FormField
+                  control={form.control}
+                  name="platform"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Platform</FormLabel>
+                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select a platform" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {platforms.map((platform) => (
+                            <SelectItem key={platform.id} value={platform.id}>
+                              <div className="flex items-center gap-2">
+                                <platform.icon className="w-4 h-4" />
+                                {platform.name}
+                              </div>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="title"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Post Title</FormLabel>
                       <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select a platform" />
-                        </SelectTrigger>
+                        <Input placeholder="Enter your post title" {...field} />
                       </FormControl>
-                      <SelectContent>
-                        {platforms.map((platform) => (
-                          <SelectItem key={platform.id} value={platform.id}>
-                            <div className="flex items-center gap-2">
-                              <platform.icon className="w-4 h-4" />
-                              {platform.name}
-                            </div>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-              <FormField
-                control={form.control}
-                name="title"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Post Title</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Enter your post title" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+                <FormField
+                  control={form.control}
+                  name="description"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Description</FormLabel>
+                      <FormControl>
+                        <Textarea
+                          placeholder="Enter your post description"
+                          className="min-h-[100px]"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-              <FormField
-                control={form.control}
-                name="description"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Description</FormLabel>
-                    <FormControl>
-                      <Textarea
-                        placeholder="Enter your post description"
-                        className="min-h-[100px]"
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+                <Button type="submit" className="w-full" disabled={mutation.isPending}>
+                  {mutation.isPending ? (
+                    <>
+                      <Loader2Icon className="mr-2 h-4 w-4 animate-spin" />
+                      Generating...
+                    </>
+                  ) : (
+                    <>
+                      Generate Post
+                      <Share2Icon className="ml-2 h-4 w-4" />
+                    </>
+                  )}
+                </Button>
+              </form>
+            </Form>
+          </CardContent>
+        </Card>
 
-              <Button type="submit" className="w-full" disabled={mutation.isPending}>
-                {mutation.isPending ? (
-                  <>
-                    <Loader2Icon className="mr-2 h-4 w-4 animate-spin" />
-                    Generating...
-                  </>
-                ) : (
-                  <>
-                    Generate Post
-                    <Share2Icon className="ml-2 h-4 w-4" />
-                  </>
-                )}
-              </Button>
-            </form>
-          </Form>
-        </CardContent>
-      </Card>
-
-      {preview && (
-        <SocialPostPreview
-          platform={preview.platform}
-          title={preview.title}
-          description={preview.description}
-          tags={preview.tags}
-        />
-      )}
-    </div>
+        {preview && (
+          <SocialPostPreview
+            platform={preview.platform}
+            title={preview.title}
+            description={preview.description}
+            tags={preview.tags}
+          />
+        )}
+      </div>
+    </>
   );
 }

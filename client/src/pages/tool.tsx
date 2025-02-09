@@ -53,8 +53,8 @@ export default function Tool() {
   return (
     <>
       <SEO
-        title="Etsy Seller Tools - Tags, Watermarks & Brand Colors"
-        description="Free tools for Etsy sellers: Generate optimized tags, create watermarks, and design brand color palettes. Boost your shop's visibility and brand consistency."
+        title="Etsy Seller Tools - Tags, Watermarks, Social Posts & Brand Colors"
+        description="Professional tools for Etsy sellers: Generate SEO-optimized tags, protect images with watermarks, create engaging social media posts, and design brand color palettes. Boost your shop's visibility and sales."
         keywords={[
           "etsy tag generator",
           "etsy watermark tool",
@@ -62,8 +62,15 @@ export default function Tool() {
           "etsy color palette",
           "etsy seller tools",
           "etsy shop optimization",
+          "etsy social media posts",
+          "etsy instagram content",
+          "etsy facebook marketing",
+          "etsy pinterest strategy",
+          "social media generator",
+          "etsy post creator",
           "free etsy tools",
-          "social media generator"
+          "etsy marketing automation",
+          "etsy content creation"
         ]}
       />
       <div className="min-h-screen bg-background">
