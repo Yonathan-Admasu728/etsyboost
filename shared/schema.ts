@@ -16,7 +16,7 @@ export const listings = pgTable("listings", {
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
   email: varchar("email", { length: 255 }).notNull().unique(),
-  password: varchar("password", { length: 255 }).notNull(),
+  password: varchar("password", { length: 255 }).default('').notNull(), // Add default value
   credits: json("credits").$type<{
     image: number;
     video: number;
