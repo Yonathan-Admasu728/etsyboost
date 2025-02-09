@@ -1,70 +1,129 @@
 import Redis from "ioredis";
 import { Buffer } from "buffer";
 
-// Initialize Redis client
-const redis = new Redis(process.env.REDIS_URL || "redis://localhost:6379");
+// Initialize Redis client with fallback to memory cache if Redis is unavailable
+class FallbackCache {
+  private memoryCache: Map<string, { data: any; expiry: number }>;
+  private redis: Redis | null;
 
-// Default cache expiry time (24 hours)
-const DEFAULT_EXPIRY = 24 * 60 * 60;
+  constructor() {
+    this.memoryCache = new Map();
+    try {
+      this.redis = new Redis(process.env.REDIS_URL || "redis://localhost:6379", {
+        reconnectOnError: (err) => {
+          console.error("Redis connection error:", err);
+          return true; // Try to reconnect
+        },
+        maxRetriesPerRequest: 3,
+        retryStrategy: (times) => {
+          if (times > 3) {
+            console.warn("Redis connection failed, falling back to memory cache");
+            return null; // Stop retrying
+          }
+          return Math.min(times * 100, 3000); // Exponential backoff
+        }
+      });
+
+      this.redis.on('error', (err) => {
+        console.error('Redis Client Error:', err);
+        this.redis = null; // Fallback to memory cache on error
+      });
+    } catch (error) {
+      console.error("Redis initialization failed:", error);
+      this.redis = null;
+    }
+  }
+
+  private async useRedis(): Promise<boolean> {
+    if (!this.redis) return false;
+    try {
+      await this.redis.ping();
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async set(key: string, value: any, expiry: number = 24 * 60 * 60): Promise<void> {
+    const hasRedis = await this.useRedis();
+    if (hasRedis && this.redis) {
+      await this.redis.setex(key, expiry, JSON.stringify(value));
+    } else {
+      this.memoryCache.set(key, {
+        data: value,
+        expiry: Date.now() + expiry * 1000
+      });
+    }
+  }
+
+  async get(key: string): Promise<any> {
+    const hasRedis = await this.useRedis();
+    if (hasRedis && this.redis) {
+      const value = await this.redis.get(key);
+      return value ? JSON.parse(value) : null;
+    } else {
+      const cached = this.memoryCache.get(key);
+      if (!cached) return null;
+      if (cached.expiry < Date.now()) {
+        this.memoryCache.delete(key);
+        return null;
+      }
+      return cached.data;
+    }
+  }
+
+  async setBinary(key: string, data: Buffer, expiry: number = 24 * 60 * 60): Promise<void> {
+    const base64Data = data.toString('base64');
+    await this.set(key, base64Data, expiry);
+  }
+
+  async getBinary(key: string): Promise<Buffer | null> {
+    const data = await this.get(key);
+    return data ? Buffer.from(data, 'base64') : null;
+  }
+
+  async del(key: string): Promise<void> {
+    const hasRedis = await this.useRedis();
+    if (hasRedis && this.redis) {
+      await this.redis.del(key);
+    }
+    this.memoryCache.delete(key);
+  }
+}
+
+const cache = new FallbackCache();
 
 export class CacheService {
-  // Cache key prefix to avoid collisions
   private static prefix = "etsyboost:";
 
-  // Generate a cache key with prefix
   private static getKey(key: string): string {
     return `${this.prefix}${key}`;
   }
 
-  // Set cache with expiry
-  static async set(
-    key: string,
-    data: any,
-    expiry: number = DEFAULT_EXPIRY
-  ): Promise<void> {
-    const cacheKey = this.getKey(key);
-    const serializedData = JSON.stringify(data);
-    await redis.setex(cacheKey, expiry, serializedData);
+  static async set(key: string, data: any, expiry: number = 24 * 60 * 60): Promise<void> {
+    await cache.set(this.getKey(key), data, expiry);
   }
 
-  // Get cached data
   static async get<T>(key: string): Promise<T | null> {
-    const cacheKey = this.getKey(key);
-    const data = await redis.get(cacheKey);
-    if (!data) return null;
-    return JSON.parse(data) as T;
+    return cache.get(this.getKey(key));
   }
 
-  // Delete cached data
   static async del(key: string): Promise<void> {
-    const cacheKey = this.getKey(key);
-    await redis.del(cacheKey);
+    await cache.del(this.getKey(key));
   }
 
-  // Set binary data (for watermarked images/videos)
-  static async setBinary(
-    key: string,
-    data: Buffer,
-    expiry: number = DEFAULT_EXPIRY
-  ): Promise<void> {
-    const cacheKey = this.getKey(key);
-    await redis.setex(cacheKey, expiry, data.toString("base64"));
+  static async setBinary(key: string, data: Buffer, expiry: number = 24 * 60 * 60): Promise<void> {
+    await cache.setBinary(this.getKey(key), data, expiry);
   }
 
-  // Get binary data
   static async getBinary(key: string): Promise<Buffer | null> {
-    const cacheKey = this.getKey(key);
-    const data = await redis.get(cacheKey);
-    if (!data) return null;
-    return Buffer.from(data, "base64");
+    return cache.getBinary(this.getKey(key));
   }
 
-  // Generate cache key for tag generation
   static generateTagKey(title: string, description: string, category: string): string {
     return `tags:${Buffer.from(`${title}:${description}:${category}`).toString("base64")}`;
   }
 
-  // Generate cache key for watermark
   static generateWatermarkKey(
     fileHash: string,
     watermarkText: string,
