@@ -9,23 +9,23 @@ import MemoryStore from "memorystore";
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Trust proxy - required for rate limiting behind reverse proxies
-app.set('trust proxy', 1);
+// Trust proxy - required for rate limiting and proper IP detection behind Replit proxy
+app.set('trust proxy', '2');  // Set to 2 to handle Replit's proxy setup
 
-// Security middleware with development-friendly CSP
+// Security middleware with Replit-friendly CSP
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
-      defaultSrc: ["'self'", "*.replit.dev"],
-      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "*.replit.dev"],
-      styleSrc: ["'self'", "'unsafe-inline'", "*.replit.dev"],
-      imgSrc: ["'self'", "data:", "https:", "*.replit.dev"],
-      connectSrc: ["'self'", "https:", "wss:", "*.replit.dev"],
-      fontSrc: ["'self'", "https:", "data:", "*.replit.dev"],
+      defaultSrc: ["'self'", "*.replit.app", "*.replit.dev"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "*.replit.app", "*.replit.dev"],
+      styleSrc: ["'self'", "'unsafe-inline'", "*.replit.app", "*.replit.dev"],
+      imgSrc: ["'self'", "data:", "https:", "*.replit.app", "*.replit.dev"],
+      connectSrc: ["'self'", "https:", "wss:", "*.replit.app", "*.replit.dev"],
+      fontSrc: ["'self'", "https:", "data:", "*.replit.app", "*.replit.dev"],
       objectSrc: ["'none'"],
-      mediaSrc: ["'self'", "*.replit.dev"],
-      frameSrc: ["'self'", "*.replit.dev"],
-      workerSrc: ["'self'", "blob:", "*.replit.dev"],
+      mediaSrc: ["'self'", "*.replit.app", "*.replit.dev"],
+      frameSrc: ["'self'", "*.replit.app", "*.replit.dev"],
+      workerSrc: ["'self'", "blob:", "*.replit.app", "*.replit.dev"],
     },
   },
   crossOriginEmbedderPolicy: false,
@@ -33,10 +33,11 @@ app.use(helmet({
   crossOriginOpenerPolicy: { policy: "unsafe-none" },
 }));
 
-// CORS setup for Replit
+// CORS setup for Replit deployment
 app.use((req, res, next) => {
   const origin = req.get('origin');
-  if (origin && origin.endsWith('.replit.dev')) {
+  // Allow both .replit.dev and .replit.app domains
+  if (origin && (origin.endsWith('.replit.dev') || origin.endsWith('.replit.app'))) {
     res.header('Access-Control-Allow-Origin', origin);
     res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
     res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
@@ -49,16 +50,20 @@ app.use((req, res, next) => {
   next();
 });
 
-// Rate limiting
+// Rate limiting with proper configuration for Replit
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 100,
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // Limit each IP to 100 requests per windowMs
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => {
+    // Skip rate limiting for development environment
+    return process.env.NODE_ENV === 'development';
+  }
 });
 app.use(limiter);
 
-// Session configuration using MemoryStore
+// Session configuration using MemoryStore only
 const MemoryStoreSession = MemoryStore(session);
 const sessionStore = new MemoryStoreSession({
   checkPeriod: 86400000 // prune expired entries every 24h
@@ -71,31 +76,37 @@ app.use(session({
   saveUninitialized: false,
   cookie: {
     secure: app.get('env') === 'production',
-    maxAge: 24 * 60 * 60 * 1000 // 24 hours
+    maxAge: 24 * 60 * 60 * 1000, // 24 hours
+    sameSite: 'lax'
   }
 }));
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: false }));
+// Body parsing middleware with increased limit for file uploads
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: false, limit: '50mb' }));
 
-// Logging middleware
+// Enhanced logging middleware
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;
-  let capturedJsonResponse: Record<string, any> | undefined = undefined;
+  const method = req.method;
 
-  const originalResJson = res.json;
-  res.json = function (bodyJson, ...args) {
-    capturedJsonResponse = bodyJson;
-    return originalResJson.apply(res, [bodyJson, ...args]);
-  };
-
-  res.on("finish", () => {
+  res.on('finish', () => {
     const duration = Date.now() - start;
-    const logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms ${
-      capturedJsonResponse ? `:: ${JSON.stringify(capturedJsonResponse).slice(0, 80)}` : ''
-    }`;
-    log(logLine);
+    log(`${method} ${path} ${res.statusCode} in ${duration}ms`);
+
+    // Log errors in detail
+    if (res.statusCode >= 400) {
+      console.error('Request error:', {
+        method,
+        path,
+        statusCode: res.statusCode,
+        duration,
+        headers: req.headers,
+        query: req.query,
+        body: req.body
+      });
+    }
   });
 
   next();
@@ -104,12 +115,21 @@ app.use((req, res, next) => {
 (async () => {
   const server = registerRoutes(app);
 
-  // Error handling middleware
-  app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+  // Enhanced error handling middleware
+  app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
 
-    console.error(`Error: ${err.message}\nStack: ${err.stack}`);
+    console.error('API Error:', {
+      path: req.path,
+      method: req.method,
+      status,
+      message: err.message,
+      stack: err.stack,
+      body: req.body,
+      query: req.query,
+      headers: req.headers
+    });
 
     res.status(status).json({ 
       message: app.get("env") === "development" ? message : "Internal Server Error",
