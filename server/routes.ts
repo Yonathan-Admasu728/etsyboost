@@ -24,16 +24,16 @@ const upload = multer({
 
 // Helper function to create watermark text SVG
 function createWatermarkSvg(text: string, opacity: number) {
-  return Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="200" height="50">
+  return Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="150" height="40">
     <text x="50%" y="50%" text-anchor="middle" alignment-baseline="middle" 
-          font-family="Arial" font-size="24" fill="rgba(255,255,255,${opacity})">
+          font-family="Arial" font-size="16" fill="rgba(255,255,255,${opacity})">
       ${text}
     </text>
   </svg>`);
 }
 
 export function registerRoutes(app: Express): Server {
-  // Public route - Generate tags
+  // Keep existing routes unchanged
   app.post("/api/generate-tags", async (req, res) => {
     try {
       const validation = generateTagsSchema.safeParse(req.body);
@@ -48,7 +48,7 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Public route - Watermark
+  // Enhanced watermark route
   app.post("/api/watermark", upload.single("file"), async (req, res) => {
     try {
       if (!req.file) {
@@ -81,25 +81,51 @@ export function registerRoutes(app: Express): Server {
         const width = metadata.width || 800;
         const height = metadata.height || 600;
 
-        // Calculate grid size based on image dimensions
-        const gridCols = Math.ceil(width / 300); // One watermark every 300px
-        const gridRows = Math.ceil(height / 200); // One watermark every 200px
+        // Calculate grid size based on image dimensions (more dense grid)
+        const gridCols = Math.ceil(width / 200); // One watermark every 200px
+        const gridRows = Math.ceil(height / 150); // One watermark every 150px
 
         // Create array of watermark positions
         const watermarks = [];
         const watermarkSvg = createWatermarkSvg(watermarkText, opacity);
 
-        // Create a grid pattern of watermarks
+        // Create a dense grid pattern of watermarks
         for (let row = 0; row < gridRows; row++) {
           for (let col = 0; col < gridCols; col++) {
+            // Add regular grid watermark
             watermarks.push({
               input: watermarkSvg,
               gravity: "northwest" as const,
-              top: row * 200 + 50,  // Add some padding
-              left: col * 300 + 50, // Add some padding
+              top: Math.round(row * 150 + 25),
+              left: Math.round(col * 200 + 25),
             });
+
+            // Add diagonal watermarks in between
+            if (row < gridRows - 1 && col < gridCols - 1) {
+              watermarks.push({
+                input: watermarkSvg,
+                gravity: "northwest" as const,
+                top: Math.round(row * 150 + 100),
+                left: Math.round(col * 200 + 125),
+              });
+            }
           }
         }
+
+        // Add central watermarks for extra coverage
+        const centerWatermarks = [
+          { top: Math.round(height / 2 - 20), left: Math.round(width / 2 - 75) },
+          { top: Math.round(height / 3 - 20), left: Math.round(width / 3 - 75) },
+          { top: Math.round((2 * height) / 3 - 20), left: Math.round((2 * width) / 3 - 75) },
+        ];
+
+        centerWatermarks.forEach(pos => {
+          watermarks.push({
+            input: watermarkSvg,
+            gravity: "northwest" as const,
+            ...pos,
+          });
+        });
 
         const watermarkedImage = await sharp(req.file.buffer)
           .composite(watermarks)
@@ -114,31 +140,41 @@ export function registerRoutes(app: Express): Server {
         const inputPath = path.join(uploadsDir, `input-${outputFileName}`);
         await fs.writeFile(inputPath, req.file.buffer);
 
-        // Create multiple watermark positions
-        const positions = [
-          { x: '10', y: '10' },                    // Top-left
-          { x: 'w-tw-10', y: '10' },               // Top-right
-          { x: '10', y: 'h-th-10' },               // Bottom-left
-          { x: 'w-tw-10', y: 'h-th-10' },          // Bottom-right
-          { x: '(w-tw)/2', y: '(h-th)/2' },        // Center
-          { x: '(w-tw)/2', y: '10' },              // Top-center
-          { x: '(w-tw)/2', y: 'h-th-10' },         // Bottom-center
-          { x: '10', y: '(h-th)/2' },              // Left-center
-          { x: 'w-tw-10', y: '(h-th)/2' }          // Right-center
-        ];
+        // Create an extensive grid of watermark positions
+        const positions = [];
+
+        // Grid positions (5x5)
+        for (let i = 0; i < 5; i++) {
+          for (let j = 0; j < 5; j++) {
+            positions.push({
+              x: `(w*${i}/4)`,
+              y: `(h*${j}/4)`,
+            });
+          }
+        }
+
+        // Add diagonal positions
+        positions.push(
+          { x: 'w/4', y: 'h/4' },
+          { x: '3*w/4', y: 'h/4' },
+          { x: 'w/4', y: '3*h/4' },
+          { x: '3*w/4', y: '3*h/4' },
+          { x: 'w/2', y: 'h/2' }
+        );
 
         // Create video filters array for each position
         const videoFilters = positions.map(pos => ({
           filter: 'drawtext',
           options: {
             text: watermarkText,
-            fontsize: '24',
+            fontsize: '20', // Smaller font size
             fontcolor: `white@${opacity}`,
             x: pos.x,
             y: pos.y,
             box: '1',
-            boxcolor: 'black@0.4',
-            boxborderw: '5',
+            boxcolor: 'black@0.3', // More transparent box
+            boxborderw: '3',
+            font: 'Arial',
           }
         }));
 
