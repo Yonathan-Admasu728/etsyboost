@@ -9,22 +9,38 @@ const app = express();
 // Trust proxy - required for rate limiting behind reverse proxies
 app.set('trust proxy', 1);
 
-// Security middleware
+// Security middleware with development-friendly CSP
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
-      defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
-      styleSrc: ["'self'", "'unsafe-inline'"],
-      imgSrc: ["'self'", "data:", "https:"],
-      connectSrc: ["'self'", "https:"],
-      fontSrc: ["'self'", "https:", "data:"],
+      defaultSrc: ["'self'", "*.replit.dev"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "*.replit.dev"],
+      styleSrc: ["'self'", "'unsafe-inline'", "*.replit.dev"],
+      imgSrc: ["'self'", "data:", "https:", "*.replit.dev"],
+      connectSrc: ["'self'", "https:", "wss:", "*.replit.dev"],
+      fontSrc: ["'self'", "https:", "data:", "*.replit.dev"],
       objectSrc: ["'none'"],
-      mediaSrc: ["'self'"],
-      frameSrc: ["'none'"],
+      mediaSrc: ["'self'", "*.replit.dev"],
+      frameSrc: ["'self'", "*.replit.dev"],
+      workerSrc: ["'self'", "blob:", "*.replit.dev"],
     },
   },
+  crossOriginEmbedderPolicy: false,
+  crossOriginResourcePolicy: { policy: "cross-origin" },
+  crossOriginOpenerPolicy: { policy: "unsafe-none" },
 }));
+
+// CORS setup
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*.replit.dev');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+  next();
+});
 
 // Rate limiting
 const limiter = rateLimit({
