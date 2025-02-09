@@ -4,11 +4,10 @@ import { setupVite, serveStatic, log } from "./vite";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import session from "express-session";
-import Redis from "ioredis";
-import { RedisStore } from "connect-redis";
 import MemoryStore from "memorystore";
 
 const app = express();
+const PORT = process.env.PORT || 3000;
 
 // Trust proxy - required for rate limiting behind reverse proxies
 app.set('trust proxy', 1);
@@ -34,7 +33,7 @@ app.use(helmet({
   crossOriginOpenerPolicy: { policy: "unsafe-none" },
 }));
 
-// CORS setup
+// CORS setup for Replit
 app.use((req, res, next) => {
   const origin = req.get('origin');
   if (origin && origin.endsWith('.replit.dev')) {
@@ -52,41 +51,18 @@ app.use((req, res, next) => {
 
 // Rate limiting
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
+  windowMs: 15 * 60 * 1000,
+  max: 100,
   standardHeaders: true,
   legacyHeaders: false,
 });
 app.use(limiter);
 
-// Session configuration
+// Session configuration using MemoryStore
 const MemoryStoreSession = MemoryStore(session);
-let sessionStore: session.Store;
-
-try {
-  const redis = new Redis({
-    host: process.env.REDIS_HOST || '127.0.0.1',
-    port: Number(process.env.REDIS_PORT) || 6379,
-    maxRetriesPerRequest: 1,
-    retryStrategy: () => null // Disable retries
-  });
-
-  redis.on('error', (err) => {
-    console.log('Redis connection error, falling back to MemoryStore:', err.message);
-    if (!sessionStore || !(sessionStore instanceof MemoryStoreSession)) {
-      sessionStore = new MemoryStoreSession({
-        checkPeriod: 86400000 // prune expired entries every 24h
-      });
-    }
-  });
-
-  sessionStore = new RedisStore({ client: redis });
-} catch (err) {
-  console.log('Failed to initialize Redis, using MemoryStore:', (err as Error).message);
-  sessionStore = new MemoryStoreSession({
-    checkPeriod: 86400000 // prune expired entries every 24h
-  });
-}
+const sessionStore = new MemoryStoreSession({
+  checkPeriod: 86400000 // prune expired entries every 24h
+});
 
 app.use(session({
   store: sessionStore,
@@ -133,10 +109,8 @@ app.use((req, res, next) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
 
-    // Log error details
     console.error(`Error: ${err.message}\nStack: ${err.stack}`);
 
-    // In production, don't expose error details
     res.status(status).json({ 
       message: app.get("env") === "development" ? message : "Internal Server Error",
       ...(app.get("env") === "development" ? { stack: err.stack } : {})
@@ -148,11 +122,9 @@ app.use((req, res, next) => {
   } else {
     // Production static file serving with proper caching
     app.use((req, res, next) => {
-      // Cache static assets for 1 year
       if (req.url.match(/\.(js|css|ico|jpg|jpeg|png|gif|woff|woff2|ttf|eot)$/)) {
         res.setHeader("Cache-Control", "public, max-age=31536000");
       } else {
-        // For HTML and other dynamic content, no cache
         res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
       }
       next();
@@ -160,7 +132,6 @@ app.use((req, res, next) => {
     serveStatic(app);
   }
 
-  const PORT = process.env.PORT || 5000;
   server.listen(Number(PORT), "0.0.0.0", () => {
     log(`Server running in ${app.get("env")} mode on port ${PORT}`);
   });
