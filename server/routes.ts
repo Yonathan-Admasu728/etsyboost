@@ -9,6 +9,8 @@ import ffmpeg from "fluent-ffmpeg";
 import { v4 as uuidv4 } from "uuid";
 import path from "path";
 import fs from "fs/promises";
+import crypto from "crypto";
+import { CacheService } from "./services/cache";
 
 // Ensure uploads directory exists
 const uploadsDir = path.join(process.cwd(), "uploads");
@@ -32,8 +34,12 @@ function createWatermarkSvg(text: string, opacity: number) {
   </svg>`);
 }
 
+// Helper function to generate file hash
+async function generateFileHash(buffer: Buffer): Promise<string> {
+  return crypto.createHash('sha256').update(buffer).digest('hex');
+}
+
 export function registerRoutes(app: Express): Server {
-  // Keep existing routes unchanged
   app.post("/api/generate-tags", async (req, res) => {
     try {
       const validation = generateTagsSchema.safeParse(req.body);
@@ -41,19 +47,59 @@ export function registerRoutes(app: Express): Server {
         return res.status(400).json({ error: "Invalid input" });
       }
 
+      const { title, description, category } = validation.data;
+      const cacheKey = CacheService.generateTagKey(title, description, category);
+
+      // Try to get from cache first
+      const cachedResult = await CacheService.get(cacheKey);
+      if (cachedResult) {
+        console.log("[Cache] Hit - Tags");
+        return res.json(cachedResult);
+      }
+
+      console.log("[Cache] Miss - Tags");
       const result = await storage.generateTags(validation.data);
+
+      // Cache the result
+      await CacheService.set(cacheKey, result);
+
       res.json(result);
     } catch (error) {
+      console.error("Generate tags error:", error);
       res.status(500).json({ error: "Failed to generate tags" });
     }
   });
 
-  // Enhanced watermark route
   app.post("/api/watermark", upload.single("file"), async (req, res) => {
     try {
       if (!req.file) {
         return res.status(400).json({ error: "No file uploaded" });
       }
+
+      // Generate file hash for caching
+      const fileHash = await generateFileHash(req.file.buffer);
+      const watermarkText = req.body.watermarkText;
+      const position = req.body.position;
+      const opacity = parseFloat(req.body.opacity);
+
+      const cacheKey = CacheService.generateWatermarkKey(
+        fileHash,
+        watermarkText,
+        position,
+        opacity
+      );
+
+      // Try to get from cache first
+      const cachedResult = await CacheService.getBinary(cacheKey);
+      if (cachedResult) {
+        console.log("[Cache] Hit - Watermark");
+        const fileType = await fileTypeFromBuffer(cachedResult);
+        res.setHeader('Content-Type', fileType?.mime || 'application/octet-stream');
+        res.setHeader('Content-Disposition', `attachment; filename="watermarked.${fileType?.ext || 'file'}"`);
+        return res.send(cachedResult);
+      }
+
+      console.log("[Cache] Miss - Watermark");
 
       // Detect file type
       const fileType = await fileTypeFromBuffer(req.file.buffer);
@@ -69,9 +115,6 @@ export function registerRoutes(app: Express): Server {
       }
 
       // Process watermark
-      const watermarkText = req.body.watermarkText;
-      const opacity = parseFloat(req.body.opacity);
-
       const outputFileName = `${uuidv4()}.${fileType.ext}`;
       const outputPath = path.join(uploadsDir, outputFileName);
 
@@ -131,7 +174,9 @@ export function registerRoutes(app: Express): Server {
           .composite(watermarks)
           .toBuffer();
 
-        // Send the watermarked image
+        // Cache the result before sending
+        await CacheService.setBinary(cacheKey, watermarkedImage);
+
         res.setHeader('Content-Type', fileType.mime);
         res.setHeader('Content-Disposition', `attachment; filename="watermarked.${fileType.ext}"`);
         res.send(watermarkedImage);
@@ -191,9 +236,12 @@ export function registerRoutes(app: Express): Server {
         await fs.unlink(inputPath);
 
         // Send the watermarked video
+        // Cache the result before sending
+        const videoBuffer = await fs.readFile(outputPath);
+        await CacheService.setBinary(cacheKey, videoBuffer);
+
         res.setHeader('Content-Type', fileType.mime);
         res.setHeader('Content-Disposition', `attachment; filename="watermarked.${fileType.ext}"`);
-        const videoBuffer = await fs.readFile(outputPath);
         res.send(videoBuffer);
 
         // Clean up output file after sending
