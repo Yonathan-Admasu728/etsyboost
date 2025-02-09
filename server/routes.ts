@@ -11,7 +11,7 @@ import path from "path";
 import fs from "fs/promises";
 import crypto from "crypto";
 import { CacheService } from "./services/cache";
-import { db } from "./db";
+//import { db } from "./db"; // Removed as database interaction is handled by storage
 import { eq, sql } from "drizzle-orm";
 
 // Ensure uploads directory exists
@@ -255,28 +255,11 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Add analytics endpoints
+  // Update analytics endpoints to use storage
   app.post("/api/analytics/impression", async (req, res) => {
     try {
       const { position, size } = req.body;
-
-      // Update impressions count
-      await db
-        .insert(adImpressions)
-        .values({
-          position,
-          size,
-          impressions: 1,
-          lastImpressionAt: new Date(),
-        })
-        .onConflictDoUpdate({
-          target: [adImpressions.position, adImpressions.size],
-          set: {
-            impressions: sql`${adImpressions.impressions} + 1`,
-            lastImpressionAt: new Date(),
-          },
-        });
-
+      await storage.logAdImpression(position, size);
       res.json({ success: true });
     } catch (error) {
       console.error("Ad impression error:", error);
@@ -287,23 +270,7 @@ export function registerRoutes(app: Express): Server {
   app.post("/api/analytics/tool-usage", async (req, res) => {
     try {
       const { toolType } = req.body;
-
-      // Update tool usage count
-      await db
-        .insert(toolUsage)
-        .values({
-          toolType,
-          totalUses: 1,
-          lastUsedAt: new Date(),
-        })
-        .onConflictDoUpdate({
-          target: [toolUsage.toolType],
-          set: {
-            totalUses: sql`${toolUsage.totalUses} + 1`,
-            lastUsedAt: new Date(),
-          },
-        });
-
+      await storage.logToolUsage(toolType);
       res.json({ success: true });
     } catch (error) {
       console.error("Tool usage error:", error);
@@ -313,24 +280,8 @@ export function registerRoutes(app: Express): Server {
 
   app.get("/api/analytics/stats", async (req, res) => {
     try {
-      const toolStats = await db
-        .select({
-          toolType: toolUsage.toolType,
-          totalUses: toolUsage.totalUses,
-        })
-        .from(toolUsage)
-        .orderBy(toolUsage.totalUses);
-
-      const totalImpressions = await db
-        .select({
-          total: sql<number>`sum(${adImpressions.impressions})`,
-        })
-        .from(adImpressions);
-
-      res.json({
-        toolStats,
-        totalImpressions: totalImpressions[0]?.total || 0,
-      });
+      const stats = await storage.getAnalyticsStats();
+      res.json(stats);
     } catch (error) {
       console.error("Stats error:", error);
       res.status(500).json({ error: "Failed to fetch stats" });

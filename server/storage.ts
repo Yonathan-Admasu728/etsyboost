@@ -1,6 +1,6 @@
-import { listings, type Listing, type InsertListing, type ScoredTag, users, watermarks, type User, type InsertUser, type Watermark, type InsertWatermark } from "@shared/schema";
+import { listings, type Listing, type InsertListing, type ScoredTag, users, watermarks, type User, type InsertUser, type Watermark, type InsertWatermark, adImpressions, toolUsage } from "@shared/schema";
 import { db } from "./db";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 
 // Emoji mappings for different categories and concepts
 const EMOJI_MAPPINGS: Record<string, string[]> = {
@@ -112,6 +112,11 @@ export interface IStorage {
   deductImageCredit(userId: number): Promise<void>;
   deductVideoCredit(userId: number): Promise<void>;
   createWatermark(insertWatermark: InsertWatermark): Promise<Watermark>;
+
+  // Add new analytics methods
+  logAdImpression(position: string, size: string): Promise<void>;
+  logToolUsage(toolType: string): Promise<void>;
+  getAnalyticsStats(): Promise<{ toolStats: any[], totalImpressions: number }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -295,6 +300,62 @@ export class DatabaseStorage implements IStorage {
       })
       .returning();
     return watermark;
+  }
+
+  async logAdImpression(position: string, size: string): Promise<void> {
+    await db
+      .insert(adImpressions)
+      .values({
+        position,
+        size,
+        impressions: 1,
+        lastImpressionAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: [adImpressions.position, adImpressions.size],
+        set: {
+          impressions: sql`${adImpressions.impressions} + 1`,
+          lastImpressionAt: new Date(),
+        },
+      });
+  }
+
+  async logToolUsage(toolType: string): Promise<void> {
+    await db
+      .insert(toolUsage)
+      .values({
+        toolType,
+        totalUses: 1,
+        lastUsedAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: [toolUsage.toolType],
+        set: {
+          totalUses: sql`${toolUsage.totalUses} + 1`,
+          lastUsedAt: new Date(),
+        },
+      });
+  }
+
+  async getAnalyticsStats(): Promise<{ toolStats: any[], totalImpressions: number }> {
+    const toolStats = await db
+      .select({
+        toolType: toolUsage.toolType,
+        totalUses: toolUsage.totalUses,
+      })
+      .from(toolUsage)
+      .orderBy(toolUsage.totalUses);
+
+    const totalImpressions = await db
+      .select({
+        total: sql<number>`sum(${adImpressions.impressions})`,
+      })
+      .from(adImpressions);
+
+    return {
+      toolStats,
+      totalImpressions: totalImpressions[0]?.total || 0,
+    };
   }
 }
 
