@@ -42,14 +42,14 @@ function SocialPostPreview({ platform, title, description, tags }: SocialPostPre
         {platform === "pinterest" && <SiPinterest className="w-5 h-5" />}
         <span className="font-medium capitalize">{platform} Preview</span>
       </div>
-      
+
       <div className="aspect-square bg-accent/10 rounded-lg mb-4 flex items-center justify-center">
         <span className="text-sm text-muted-foreground">Product Image</span>
       </div>
-      
+
       <h3 className="font-semibold">{title}</h3>
       <p className="text-sm text-muted-foreground">{description}</p>
-      
+
       {tags && tags.length > 0 && (
         <div className="flex flex-wrap gap-2 mt-2">
           {tags.map((tag, index) => (
@@ -78,26 +78,34 @@ export function SocialPostGenerator() {
 
   const mutation = useMutation({
     mutationFn: async (data: GenerateSocialPostRequest) => {
-      const res = await apiRequest("POST", "/api/social/generate-post", data);
-      return res.json();
+      try {
+        const res = await apiRequest("POST", "/api/social/generate-post", data);
+        if (!res.ok) {
+          throw new Error("Failed to generate post");
+        }
+        return res.json();
+      } catch (error) {
+        throw new Error("Failed to generate post. Please try again.");
+      }
     },
     onSuccess: (data) => {
+      setPreview(data);
       toast({
         title: "Post Generated!",
         description: "Your social media post has been generated successfully.",
       });
     },
-    onError: () => {
+    onError: (error) => {
+      setPreview(null);
       toast({
         title: "Error",
-        description: "Failed to generate post. Please try again.",
+        description: error.message || "Failed to generate post. Please try again.",
         variant: "destructive",
       });
     },
   });
 
   const onSubmit = (data: GenerateSocialPostRequest) => {
-    setPreview(data);
     mutation.mutate(data);
   };
 

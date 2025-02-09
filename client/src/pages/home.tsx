@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Link } from "wouter";
 import { AdPlacement } from "@/components/ui/AdPlacement";
-import { RocketIcon, TagIcon, ImageIcon, PaletteIcon } from "lucide-react";
+import { RocketIcon, TagIcon, ImageIcon, PaletteIcon, Share2Icon } from "lucide-react";
 import { SEO } from "@/components/ui/seo";
 import { useAnalytics } from "@/hooks/use-analytics";
 
@@ -84,20 +84,37 @@ export default function Home() {
 
             <Card className="relative overflow-hidden group hover:shadow-lg transition-shadow duration-200">
               <CardContent className="pt-6">
-                <PaletteIcon className="w-12 h-12 text-primary mb-4" />
-                <h3 className="text-xl font-semibold mb-2">Brand Colors</h3>
+                <Share2Icon className="w-12 h-12 text-primary mb-4" />
+                <h3 className="text-xl font-semibold mb-2">Social Posts</h3>
                 <p className="text-muted-foreground mb-6">
-                  Generate beautiful color palettes for your shop. Create a cohesive brand identity.
+                  Create engaging social media posts with optimized content and hashtags.
                 </p>
-                <Link href="/tool?tab=branding">
+                <Link href="/tool?tab=social">
                   <Button className="w-full group-hover:bg-primary/90">
-                    Design Colors
-                    <PaletteIcon className="ml-2 w-4 h-4" />
+                    Create Post
+                    <Share2Icon className="ml-2 w-4 h-4" />
                   </Button>
                 </Link>
               </CardContent>
             </Card>
           </div>
+
+          <Card className="relative overflow-hidden group hover:shadow-lg transition-shadow duration-200">
+            <CardContent className="pt-6">
+              <PaletteIcon className="w-12 h-12 text-primary mb-4" />
+              <h3 className="text-xl font-semibold mb-2">Brand Colors</h3>
+              <p className="text-muted-foreground mb-6">
+                Generate beautiful color palettes for your shop. Create a cohesive brand identity.
+              </p>
+              <Link href="/tool?tab=branding">
+                <Button className="w-full group-hover:bg-primary/90">
+                  Design Colors
+                  <PaletteIcon className="ml-2 w-4 h-4" />
+                </Button>
+              </Link>
+            </CardContent>
+          </Card>
+
 
           {/* Bottom ad with more padding */}
           <AdPlacement position="bottom" size="medium" className="mt-8 mb-16" />
