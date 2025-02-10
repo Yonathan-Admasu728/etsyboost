@@ -12,6 +12,7 @@ import fs from "fs/promises";
 import crypto from "crypto";
 import { CacheService } from "./services/cache";
 import { setTimeout } from "timers/promises";
+import { type Request } from "express";
 
 // Ensure uploads directory exists
 const uploadsDir = path.join(process.cwd(), "uploads");
@@ -56,7 +57,6 @@ export function registerRoutes(app: Express): Server {
 
       const cacheKey = CacheService.generateTagKey(title, description, category);
 
-      // Try to get from cache first with timeout
       try {
         console.log("[Tags] Attempting cache retrieval");
         const cachedResult = await Promise.race([
@@ -74,7 +74,6 @@ export function registerRoutes(app: Express): Server {
       }
 
       console.log("[Tags] Cache miss - generating tags");
-      // Add timeout for storage operation
       const result = await Promise.race([
         storage.generateTags(validation.data),
         setTimeout(5000).then(() => {
@@ -82,7 +81,6 @@ export function registerRoutes(app: Express): Server {
         })
       ]);
 
-      // Cache the result
       try {
         await CacheService.set(cacheKey, result);
         console.log("[Tags] Cached generated tags");
@@ -92,14 +90,14 @@ export function registerRoutes(app: Express): Server {
 
       console.log("[Tags] Sending response");
       res.json(result);
-    } catch (error) {
-      console.error("[Tags] Generate tags error:", error);
-      res.status(error.message === "Tag generation timed out" ? 504 : 500)
-        .json({ error: error.message || "Failed to generate tags" });
+    } catch (error: unknown) {
+      console.error("[Tags] Generate tags error:", error instanceof Error ? error.message : error);
+      res.status(error instanceof Error && error.message === "Tag generation timed out" ? 504 : 500)
+        .json({ error: error instanceof Error ? error.message : "Failed to generate tags" });
     }
   });
 
-  app.post("/api/watermark", upload.single("file"), async (req, res) => {
+  app.post("/api/watermark", upload.single("file"), async (req: Request, res) => {
     try {
       console.log("[Watermark] Starting watermark process");
 
@@ -246,10 +244,10 @@ export function registerRoutes(app: Express): Server {
       res.setHeader('Content-Type', fileType.mime);
       res.setHeader('Content-Disposition', `attachment; filename="watermarked.${fileType.ext}"`);
       res.send(processedBuffer);
-    } catch (error) {
-      console.error("[Watermark] Processing error:", error);
-      res.status(error.message === "Watermark processing timed out" ? 504 : 500)
-        .json({ error: error.message || "Failed to process watermark" });
+    } catch (error: unknown) {
+      console.error("[Watermark] Processing error:", error instanceof Error ? error.message : error);
+      res.status(error instanceof Error && error.message === "Watermark processing timed out" ? 504 : 500)
+        .json({ error: error instanceof Error ? error.message : "Failed to process watermark" });
     }
   });
 
@@ -310,7 +308,7 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  app.post("/api/social/generate-post", upload.single('image'), async (req, res) => {
+  app.post("/api/social/generate-post", upload.single('image'), async (req: Request, res) => {
     try {
       const validation = generateSocialPostSchema.safeParse(req.body);
       if (!validation.success) {
@@ -319,13 +317,26 @@ export function registerRoutes(app: Express): Server {
 
       const { title, description, platform, tags } = validation.data;
 
-      // Handle image upload
-      let imageUrl = null;
+      // Handle image upload with proper type checking and validation
+      let imageUrl: string | null = null;
       if (req.file) {
+        // Validate file type
+        const fileType = await fileTypeFromBuffer(req.file.buffer);
+        if (!fileType || !fileType.mime.startsWith('image/')) {
+          return res.status(400).json({ error: "Invalid file type. Please upload an image." });
+        }
+
         const fileName = `${uuidv4()}-${req.file.originalname}`;
         const filePath = path.join(uploadsDir, fileName);
-        await fs.writeFile(filePath, req.file.buffer);
-        imageUrl = `/uploads/${fileName}`;
+
+        try {
+          await fs.writeFile(filePath, req.file.buffer);
+          imageUrl = `/uploads/${fileName}`;
+          console.log(`[Social] Image saved successfully: ${fileName}`);
+        } catch (error) {
+          console.error(`[Social] Failed to save image:`, error);
+          return res.status(500).json({ error: "Failed to save image" });
+        }
       }
 
       const generatedPost = {
@@ -342,8 +353,9 @@ export function registerRoutes(app: Express): Server {
 
       res.json(generatedPost);
     } catch (error) {
-      console.error("Social post generation error:", error);
-      res.status(500).json({ error: "Failed to generate social post" });
+      const errorMessage = error instanceof Error ? error.message : "Failed to generate social post";
+      console.error("[Social] Post generation error:", errorMessage);
+      res.status(500).json({ error: errorMessage });
     }
   });
 
