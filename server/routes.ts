@@ -310,19 +310,29 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  app.post("/api/social/generate-post", async (req, res) => {
+  app.post("/api/social/generate-post", upload.single('image'), async (req, res) => {
     try {
       const validation = generateSocialPostSchema.safeParse(req.body);
       if (!validation.success) {
-        return res.status(400).json({ error: "Invalid input" });
+        return res.status(400).json({ error: "Invalid input", details: validation.error.errors });
       }
 
       const { title, description, platform, tags } = validation.data;
+
+      // Handle image upload
+      let imageUrl = null;
+      if (req.file) {
+        const fileName = `${uuidv4()}-${req.file.originalname}`;
+        const filePath = path.join(uploadsDir, fileName);
+        await fs.writeFile(filePath, req.file.buffer);
+        imageUrl = `/uploads/${fileName}`;
+      }
 
       const generatedPost = {
         platform,
         title,
         description,
+        imageUrl,
         tags: tags || [
           { text: "etsy", score: 9.5, emoji: "🛍️" },
           { text: "handmade", score: 9.0, emoji: "🎨" },
