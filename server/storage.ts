@@ -117,6 +117,7 @@ export interface IStorage {
   logAdImpression(position: string, size: string): Promise<void>;
   logToolUsage(toolType: string): Promise<void>;
   getAnalyticsStats(): Promise<{ toolStats: any[], totalImpressions: number }>;
+  healthCheck(): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -356,6 +357,17 @@ export class DatabaseStorage implements IStorage {
       toolStats,
       totalImpressions: totalImpressions[0]?.total || 0,
     };
+  }
+
+  async healthCheck(): Promise<boolean> {
+    try {
+      // Simple query to check database connection
+      await db.select({ count: sql<number>`count(*)` }).from(users);
+      return true;
+    } catch (error) {
+      console.error('[Storage] Health check failed:', error);
+      return false;
+    }
   }
 }
 

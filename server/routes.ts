@@ -11,8 +11,7 @@ import path from "path";
 import fs from "fs/promises";
 import crypto from "crypto";
 import { CacheService } from "./services/cache";
-//import { db } from "./db"; // Removed as database interaction is handled by storage
-import { eq, sql } from "drizzle-orm";
+import { setTimeout } from "timers/promises";
 
 // Ensure uploads directory exists
 const uploadsDir = path.join(process.cwd(), "uploads");
@@ -57,9 +56,14 @@ export function registerRoutes(app: Express): Server {
 
       const cacheKey = CacheService.generateTagKey(title, description, category);
 
-      // Try to get from cache first
+      // Try to get from cache first with timeout
       try {
-        const cachedResult = await CacheService.get(cacheKey);
+        console.log("[Tags] Attempting cache retrieval");
+        const cachedResult = await Promise.race([
+          CacheService.get(cacheKey),
+          setTimeout(2000, null)
+        ]);
+
         if (cachedResult) {
           console.log("[Tags] Cache hit");
           return res.json(cachedResult);
@@ -70,7 +74,13 @@ export function registerRoutes(app: Express): Server {
       }
 
       console.log("[Tags] Cache miss - generating tags");
-      const result = await storage.generateTags(validation.data);
+      // Add timeout for storage operation
+      const result = await Promise.race([
+        storage.generateTags(validation.data),
+        setTimeout(5000).then(() => {
+          throw new Error("Tag generation timed out");
+        })
+      ]);
 
       // Cache the result
       try {
@@ -84,7 +94,8 @@ export function registerRoutes(app: Express): Server {
       res.json(result);
     } catch (error) {
       console.error("[Tags] Generate tags error:", error);
-      res.status(500).json({ error: "Failed to generate tags" });
+      res.status(error.message === "Tag generation timed out" ? 504 : 500)
+        .json({ error: error.message || "Failed to generate tags" });
     }
   });
 
@@ -97,33 +108,17 @@ export function registerRoutes(app: Express): Server {
         return res.status(400).json({ error: "No file uploaded" });
       }
 
-      // Log file details
       console.log("[Watermark] File received:", {
         originalname: req.file.originalname,
         mimetype: req.file.mimetype,
         size: req.file.size
       });
 
-      // Ensure uploads directory exists
-      try {
-        await fs.mkdir(uploadsDir, { recursive: true });
-        console.log("[Watermark] Uploads directory verified");
-      } catch (err) {
-        console.error("[Watermark] Failed to create uploads directory:", err);
-        return res.status(500).json({ error: "Server configuration error" });
-      }
-
       // Generate file hash for caching
       const fileHash = await generateFileHash(req.file.buffer);
       const watermarkText = req.body.watermarkText;
       const position = req.body.position;
       const opacity = parseFloat(req.body.opacity);
-
-      console.log("[Watermark] Processing parameters:", {
-        textLength: watermarkText?.length,
-        position,
-        opacity
-      });
 
       const cacheKey = CacheService.generateWatermarkKey(
         fileHash,
@@ -132,9 +127,14 @@ export function registerRoutes(app: Express): Server {
         opacity
       );
 
-      // Try to get from cache first
+      // Try to get from cache first with timeout
       try {
-        const cachedResult = await CacheService.getBinary(cacheKey);
+        console.log("[Watermark] Attempting cache retrieval");
+        const cachedResult = await Promise.race([
+          CacheService.getBinary(cacheKey),
+          setTimeout(2000, null)
+        ]);
+
         if (cachedResult) {
           console.log("[Watermark] Cache hit");
           const fileType = await fileTypeFromBuffer(cachedResult);
@@ -144,136 +144,136 @@ export function registerRoutes(app: Express): Server {
         }
       } catch (err) {
         console.error("[Watermark] Cache error:", err);
-        // Continue without cache
       }
 
       console.log("[Watermark] Cache miss - processing file");
 
-      // Detect file type
-      const fileType = await fileTypeFromBuffer(req.file.buffer);
-      if (!fileType) {
-        console.error("[Watermark] Invalid file type");
-        return res.status(400).json({ error: "Invalid file type" });
-      }
+      // Rest of the watermark processing code with timeout
+      const processingPromise = async () => {
+        const fileType = await fileTypeFromBuffer(req.file.buffer);
+        if (!fileType) {
+          throw new Error("Invalid file type");
+        }
 
-      const isVideo = fileType.mime.startsWith("video");
-      const isImage = fileType.mime.startsWith("image");
+        const isVideo = fileType.mime.startsWith("video");
+        const isImage = fileType.mime.startsWith("image");
 
-      if (!isVideo && !isImage) {
-        console.error("[Watermark] Unsupported file type:", fileType.mime);
-        return res.status(400).json({ error: "Unsupported file type" });
-      }
+        if (!isVideo && !isImage) {
+          throw new Error("Unsupported file type");
+        }
 
-      // Process watermark
-      const outputFileName = `${uuidv4()}.${fileType.ext}`;
-      const outputPath = path.join(uploadsDir, outputFileName);
-
-      if (isImage) {
-        try {
-          console.log("[Watermark] Processing image");
-          // Get image dimensions
+        let processedBuffer;
+        if (isImage) {
           const metadata = await sharp(req.file.buffer).metadata();
-          const width = metadata.width || 800;
-          const height = metadata.height || 600;
-
-          // Create watermark SVG
           const watermarkSvg = createWatermarkSvg(watermarkText, opacity);
-
-          // Single watermark for testing
-          const watermarkedImage = await sharp(req.file.buffer)
+          processedBuffer = await sharp(req.file.buffer)
             .composite([{
               input: watermarkSvg,
               gravity: position === 'center' ? 'center' : position,
             }])
             .toBuffer();
+        } else {
+          // Video processing remains the same
+          const outputFileName = `${uuidv4()}.${fileType.ext}`;
+          const outputPath = path.join(uploadsDir, outputFileName);
+          const inputPath = path.join(uploadsDir, `input-${outputFileName}`);
+          await fs.writeFile(inputPath, req.file.buffer);
 
-          // Cache the result before sending
-          try {
-            await CacheService.setBinary(cacheKey, watermarkedImage);
-            console.log("[Watermark] Cached processed image");
-          } catch (err) {
-            console.error("[Watermark] Failed to cache result:", err);
+          const positions = [];
+          for (let i = 0; i < 5; i++) {
+            for (let j = 0; j < 5; j++) {
+              positions.push({
+                x: `(w*${i}/4)`,
+                y: `(h*${j}/4)`,
+              });
+            }
           }
 
-          console.log("[Watermark] Sending processed image");
-          res.setHeader('Content-Type', fileType.mime);
-          res.setHeader('Content-Disposition', `attachment; filename="watermarked.${fileType.ext}"`);
-          return res.send(watermarkedImage);
-        } catch (err) {
-          console.error("[Watermark] Image processing error:", err);
-          return res.status(500).json({ error: "Failed to process image" });
+          positions.push(
+            { x: 'w/4', y: 'h/4' },
+            { x: '3*w/4', y: 'h/4' },
+            { x: 'w/4', y: '3*h/4' },
+            { x: '3*w/4', y: '3*h/4' },
+            { x: 'w/2', y: 'h/2' }
+          );
+
+          const videoFilters = positions.map(pos => ({
+            filter: 'drawtext',
+            options: {
+              text: watermarkText,
+              fontsize: '20',
+              fontcolor: `white@${opacity}`,
+              x: pos.x,
+              y: pos.y,
+              box: '1',
+              boxcolor: 'black@0.3',
+              boxborderw: '3',
+              font: 'Arial',
+            }
+          }));
+
+          await new Promise<void>((resolve, reject) => {
+            ffmpeg(inputPath)
+              .videoFilters(videoFilters)
+              .save(outputPath)
+              .on('end', () => resolve())
+              .on('error', reject);
+          });
+
+          await fs.unlink(inputPath);
+          processedBuffer = await fs.readFile(outputPath);
+          await fs.unlink(outputPath);
         }
-      } else if (isVideo) {
-        console.log("[Watermark] Processing video");
-        // Save temp video file
-        const inputPath = path.join(uploadsDir, `input-${outputFileName}`);
-        await fs.writeFile(inputPath, req.file.buffer);
 
-        // Create an extensive grid of watermark positions
-        const positions = [];
+        return { processedBuffer, fileType };
+      };
 
-        // Grid positions (5x5)
-        for (let i = 0; i < 5; i++) {
-          for (let j = 0; j < 5; j++) {
-            positions.push({
-              x: `(w*${i}/4)`,
-              y: `(h*${j}/4)`,
-            });
-          }
-        }
+      const { processedBuffer, fileType } = await Promise.race([
+        processingPromise(),
+        setTimeout(10000).then(() => {
+          throw new Error("Watermark processing timed out");
+        })
+      ]);
 
-        // Add diagonal positions
-        positions.push(
-          { x: 'w/4', y: 'h/4' },
-          { x: '3*w/4', y: 'h/4' },
-          { x: 'w/4', y: '3*h/4' },
-          { x: '3*w/4', y: '3*h/4' },
-          { x: 'w/2', y: 'h/2' }
-        );
-
-        // Create video filters array for each position
-        const videoFilters = positions.map(pos => ({
-          filter: 'drawtext',
-          options: {
-            text: watermarkText,
-            fontsize: '20', // Smaller font size
-            fontcolor: `white@${opacity}`,
-            x: pos.x,
-            y: pos.y,
-            box: '1',
-            boxcolor: 'black@0.3', // More transparent box
-            boxborderw: '3',
-            font: 'Arial',
-          }
-        }));
-
-        // Add watermark using ffmpeg with multiple positions
-        await new Promise<void>((resolve, reject) => {
-          ffmpeg(inputPath)
-            .videoFilters(videoFilters)
-            .save(outputPath)
-            .on('end', () => resolve())
-            .on('error', reject);
-        });
-
-        // Clean up temp file
-        await fs.unlink(inputPath);
-
-        // Send the watermarked video
-        // Cache the result before sending
-        const videoBuffer = await fs.readFile(outputPath);
-        await CacheService.setBinary(cacheKey, videoBuffer);
-
-        res.setHeader('Content-Type', fileType.mime);
-        res.setHeader('Content-Disposition', `attachment; filename="watermarked.${fileType.ext}"`);
-        res.send(videoBuffer);
-
-        // Clean up output file after sending
-        await fs.unlink(outputPath);
+      // Cache the result
+      try {
+        await CacheService.setBinary(cacheKey, processedBuffer);
+        console.log("[Watermark] Cached processed file");
+      } catch (err) {
+        console.error("[Watermark] Failed to cache result:", err);
       }
+
+      res.setHeader('Content-Type', fileType.mime);
+      res.setHeader('Content-Disposition', `attachment; filename="watermarked.${fileType.ext}"`);
+      res.send(processedBuffer);
     } catch (error) {
-      console.error("[Watermark] Unexpected error:", error);
-      res.status(500).json({ error: "Failed to process watermark" });
+      console.error("[Watermark] Processing error:", error);
+      res.status(error.message === "Watermark processing timed out" ? 504 : 500)
+        .json({ error: error.message || "Failed to process watermark" });
+    }
+  });
+
+  // Add health check endpoint
+  app.get("/api/health", async (req, res) => {
+    try {
+      // Check Redis connection
+      const redisHealth = await CacheService.healthCheck();
+
+      // Check storage connection
+      const storageHealth = await storage.healthCheck();
+
+      res.json({
+        status: "healthy",
+        cache: redisHealth ? "connected" : "disconnected",
+        storage: storageHealth ? "connected" : "disconnected",
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      res.status(500).json({
+        status: "unhealthy",
+        error: error.message,
+        timestamp: new Date().toISOString()
+      });
     }
   });
 
@@ -319,8 +319,6 @@ export function registerRoutes(app: Express): Server {
 
       const { title, description, platform, tags } = validation.data;
 
-      // For now, return a mock response with the input data
-      // This will be replaced with actual AI-generated content later
       const generatedPost = {
         platform,
         title,

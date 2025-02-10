@@ -10,33 +10,40 @@ class FallbackCache {
   constructor() {
     this.memoryCache = new Map();
 
-    // Only try to connect to Redis if REDIS_URL is provided
     if (process.env.REDIS_URL) {
       try {
         this.redis = new Redis(process.env.REDIS_URL, {
-          maxRetriesPerRequest: 1, // Reduce retry attempts
+          maxRetriesPerRequest: 1,
+          connectTimeout: 2000, // 2 second timeout for initial connection
           retryStrategy: (times) => {
             if (times > 1) {
-              this.useMemoryCache = true; // Switch to memory cache after first retry
-              return null; // Stop retrying
+              this.useMemoryCache = true;
+              console.log("Redis connection failed, using memory cache");
+              return null;
             }
             return Math.min(times * 100, 1000);
           },
-          lazyConnect: true // Don't connect immediately
+          lazyConnect: true
         });
 
-        // Single error handler to avoid log spam
-        this.redis.on('error', () => {
+        this.redis.on('error', (err) => {
           if (!this.useMemoryCache) {
-            console.log("Redis unavailable, using memory cache");
+            console.error("Redis error, switching to memory cache:", err.message);
             this.useMemoryCache = true;
           }
         });
+
+        this.redis.on('connect', () => {
+          console.log("Redis connected successfully");
+          this.useMemoryCache = false;
+        });
       } catch (error) {
+        console.error("Failed to initialize Redis:", error);
         this.useMemoryCache = true;
         this.redis = null;
       }
     } else {
+      console.log("No REDIS_URL provided, using memory cache");
       this.useMemoryCache = true;
       this.redis = null;
     }
@@ -139,5 +146,17 @@ export class CacheService {
     return `watermark:${Buffer.from(
       `${fileHash}:${watermarkText}:${position}:${opacity}`
     ).toString("base64")}`;
+  }
+
+  static async healthCheck(): Promise<boolean> {
+    try {
+      const testKey = `${this.prefix}health:${Date.now()}`;
+      await cache.set(testKey, 'test', 5); // 5 seconds expiry
+      const result = await cache.get(testKey);
+      return result === 'test';
+    } catch (error) {
+      console.error('[Cache] Health check failed:', error);
+      return false;
+    }
   }
 }
