@@ -5,48 +5,56 @@ import { Buffer } from "buffer";
 class FallbackCache {
   private memoryCache: Map<string, { data: any; expiry: number }>;
   private redis: Redis | null;
+  private useMemoryCache: boolean = false;
 
   constructor() {
     this.memoryCache = new Map();
-    try {
-      this.redis = new Redis(process.env.REDIS_URL || "redis://localhost:6379", {
-        reconnectOnError: (err) => {
-          console.error("Redis connection error:", err);
-          return true; // Try to reconnect
-        },
-        maxRetriesPerRequest: 3,
-        retryStrategy: (times) => {
-          if (times > 3) {
-            console.warn("Redis connection failed, falling back to memory cache");
-            return null; // Stop retrying
-          }
-          return Math.min(times * 100, 3000); // Exponential backoff
-        }
-      });
 
-      this.redis.on('error', (err) => {
-        console.error('Redis Client Error:', err);
-        this.redis = null; // Fallback to memory cache on error
-      });
-    } catch (error) {
-      console.error("Redis initialization failed:", error);
+    // Only try to connect to Redis if REDIS_URL is provided
+    if (process.env.REDIS_URL) {
+      try {
+        this.redis = new Redis(process.env.REDIS_URL, {
+          maxRetriesPerRequest: 1, // Reduce retry attempts
+          retryStrategy: (times) => {
+            if (times > 1) {
+              this.useMemoryCache = true; // Switch to memory cache after first retry
+              return null; // Stop retrying
+            }
+            return Math.min(times * 100, 1000);
+          },
+          lazyConnect: true // Don't connect immediately
+        });
+
+        // Single error handler to avoid log spam
+        this.redis.on('error', () => {
+          if (!this.useMemoryCache) {
+            console.log("Redis unavailable, using memory cache");
+            this.useMemoryCache = true;
+          }
+        });
+      } catch (error) {
+        this.useMemoryCache = true;
+        this.redis = null;
+      }
+    } else {
+      this.useMemoryCache = true;
       this.redis = null;
     }
   }
 
   private async useRedis(): Promise<boolean> {
-    if (!this.redis) return false;
+    if (this.useMemoryCache || !this.redis) return false;
     try {
       await this.redis.ping();
       return true;
     } catch {
+      this.useMemoryCache = true;
       return false;
     }
   }
 
   async set(key: string, value: any, expiry: number = 24 * 60 * 60): Promise<void> {
-    const hasRedis = await this.useRedis();
-    if (hasRedis && this.redis) {
+    if (!this.useMemoryCache && await this.useRedis() && this.redis) {
       await this.redis.setex(key, expiry, JSON.stringify(value));
     } else {
       this.memoryCache.set(key, {
@@ -57,8 +65,7 @@ class FallbackCache {
   }
 
   async get(key: string): Promise<any> {
-    const hasRedis = await this.useRedis();
-    if (hasRedis && this.redis) {
+    if (!this.useMemoryCache && await this.useRedis() && this.redis) {
       const value = await this.redis.get(key);
       return value ? JSON.parse(value) : null;
     } else {
@@ -83,8 +90,7 @@ class FallbackCache {
   }
 
   async del(key: string): Promise<void> {
-    const hasRedis = await this.useRedis();
-    if (hasRedis && this.redis) {
+    if (!this.useMemoryCache && await this.useRedis() && this.redis) {
       await this.redis.del(key);
     }
     this.memoryCache.delete(key);
