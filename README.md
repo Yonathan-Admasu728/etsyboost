@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # EtsyBoost - Etsy Seller Optimization Tool
 
 A Next.js web application designed to help Etsy sellers optimize their product marketing workflow with intelligent visual branding tools and a refined ad-supported model.
@@ -89,3 +90,6 @@ The application will be available at `http://localhost:3000`
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
+=======
+# etsyboost
+>>>>>>> 5be745f155ceb77aa57645250fb80990c577b43a
