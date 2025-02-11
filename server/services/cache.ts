@@ -1,106 +1,97 @@
-import Redis from "ioredis";
 import { Buffer } from "buffer";
 
-// Initialize Redis client with fallback to memory cache if Redis is unavailable
-class FallbackCache {
-  private memoryCache: Map<string, { data: any; expiry: number }>;
-  private redis: Redis | null = null; // Initialize as null
-  private useMemoryCache: boolean = false;
-  private connectionError: string | null = null;
-  private isConnecting: boolean = false;
+interface CacheEntry<T> {
+  data: T;
+  expiry: number;
+  size: number;
+}
 
-  constructor() {
-    this.memoryCache = new Map();
+class MemoryCache {
+  private cache: Map<string, CacheEntry<any>>;
+  private maxSize: number; // Maximum cache size in bytes
+  private currentSize: number;
 
-    // Start in memory mode if no Redis URL
-    if (!process.env.REDIS_URL) {
-      console.log("[Cache] No REDIS_URL provided, using memory cache");
-      this.useMemoryCache = true;
-      return;
-    }
+  constructor(maxSizeInMB: number = 100) { // Default 100MB limit
+    this.cache = new Map();
+    this.maxSize = maxSizeInMB * 1024 * 1024; // Convert MB to bytes
+    this.currentSize = 0;
 
-    this.initRedisConnection();
+    // Cleanup expired items periodically (every 5 minutes)
+    setInterval(() => this.cleanup(), 5 * 60 * 1000);
   }
 
-  private async initRedisConnection() {
-    if (this.isConnecting) return;
-    this.isConnecting = true;
-
+  private calculateSize(data: any): number {
     try {
-      console.log("[Cache] Initializing Redis connection...");
-      this.redis = new Redis(process.env.REDIS_URL!, {
-        maxRetriesPerRequest: 1,
-        connectTimeout: 3000,
-        retryStrategy: (times) => {
-          if (times > 2) {
-            this.switchToMemoryCache(`Failed to connect to Redis after ${times} attempts`);
-            return null;
-          }
-          return Math.min(times * 1000, 3000);
-        }
-      });
-
-      this.redis.on('error', (err) => {
-        this.switchToMemoryCache(`Redis error: ${err.message}`);
-      });
-
-      this.redis.on('connect', () => {
-        console.log("[Cache] Redis connected successfully");
-        this.useMemoryCache = false;
-        this.connectionError = null;
-        this.isConnecting = false;
-      });
-
-    } catch (error) {
-      this.switchToMemoryCache(error instanceof Error ? error.message : "Unknown Redis initialization error");
+      const str = JSON.stringify(data);
+      return str.length * 2; // Approximate size in bytes (UTF-16)
+    } catch {
+      return 0; // If can't stringify (e.g., binary data), return 0
     }
   }
 
-  private switchToMemoryCache(error: string) {
-    if (!this.useMemoryCache) {
-      this.connectionError = error;
-      console.error(`[Cache] ${error}, switching to memory cache`);
-      this.useMemoryCache = true;
-      this.isConnecting = false;
+  private cleanup() {
+    const now = Date.now();
+    for (const [key, entry] of this.cache.entries()) {
+      if (entry.expiry < now) {
+        this.currentSize -= entry.size;
+        this.cache.delete(key);
+      }
     }
   }
 
-  private async useRedis(): Promise<boolean> {
-    if (this.useMemoryCache || !this.redis) return false;
+  private makeRoom(size: number) {
+    if (size > this.maxSize) {
+      throw new Error("Item too large for cache");
+    }
+
+    const entries = Array.from(this.cache.entries())
+      .sort((a, b) => a[1].expiry - b[1].expiry);
+
+    while (this.currentSize + size > this.maxSize && entries.length > 0) {
+      const [key, entry] = entries.shift()!;
+      this.currentSize -= entry.size;
+      this.cache.delete(key);
+    }
+  }
+
+  async set<T>(key: string, data: T, expiry: number = 24 * 60 * 60): Promise<void> {
     try {
-      await this.redis.ping();
-      return true;
+      const size = this.calculateSize(data);
+      this.makeRoom(size);
+
+      const entry: CacheEntry<T> = {
+        data,
+        expiry: Date.now() + expiry * 1000,
+        size
+      };
+
+      if (this.cache.has(key)) {
+        const oldEntry = this.cache.get(key)!;
+        this.currentSize -= oldEntry.size;
+      }
+
+      this.cache.set(key, entry);
+      this.currentSize += size;
     } catch (error) {
-      this.connectionError = error instanceof Error ? error.message : "Redis ping failed";
-      console.error(`[Cache] ${this.connectionError}`);
-      this.useMemoryCache = true;
-      return false;
+      console.error("[Cache] Error setting key:", key, error);
     }
   }
 
-  async set(key: string, value: any, expiry: number = 24 * 60 * 60): Promise<void> {
-    if (!this.useMemoryCache && await this.useRedis() && this.redis) {
-      await this.redis.setex(key, expiry, JSON.stringify(value));
-    } else {
-      this.memoryCache.set(key, {
-        data: value,
-        expiry: Date.now() + expiry * 1000
-      });
-    }
-  }
-
-  async get(key: string): Promise<any> {
-    if (!this.useMemoryCache && await this.useRedis() && this.redis) {
-      const value = await this.redis.get(key);
-      return value ? JSON.parse(value) : null;
-    } else {
-      const cached = this.memoryCache.get(key);
+  async get<T>(key: string): Promise<T | null> {
+    try {
+      const cached = this.cache.get(key);
       if (!cached) return null;
+
       if (cached.expiry < Date.now()) {
-        this.memoryCache.delete(key);
+        this.currentSize -= cached.size;
+        this.cache.delete(key);
         return null;
       }
-      return cached.data;
+
+      return cached.data as T;
+    } catch (error) {
+      console.error("[Cache] Error getting key:", key, error);
+      return null;
     }
   }
 
@@ -110,26 +101,33 @@ class FallbackCache {
   }
 
   async getBinary(key: string): Promise<Buffer | null> {
-    const data = await this.get(key);
+    const data = await this.get<string>(key);
     return data ? Buffer.from(data, 'base64') : null;
   }
 
   async del(key: string): Promise<void> {
-    if (!this.useMemoryCache && await this.useRedis() && this.redis) {
-      await this.redis.del(key);
+    try {
+      const entry = this.cache.get(key);
+      if (entry) {
+        this.currentSize -= entry.size;
+        this.cache.delete(key);
+      }
+    } catch (error) {
+      console.error("[Cache] Error deleting key:", key, error);
     }
-    this.memoryCache.delete(key);
   }
 
-  getStatus(): { using: 'redis' | 'memory', error: string | null } {
+  getStatus(): { using: 'memory', size: number, maxSize: number, items: number } {
     return {
-      using: this.useMemoryCache ? 'memory' : 'redis',
-      error: this.connectionError
+      using: 'memory',
+      size: this.currentSize,
+      maxSize: this.maxSize,
+      items: this.cache.size
     };
   }
 }
 
-const cache = new FallbackCache();
+const cache = new MemoryCache();
 
 export class CacheService {
   private static prefix = "etsyboost:";
@@ -138,12 +136,12 @@ export class CacheService {
     return `${this.prefix}${key}`;
   }
 
-  static async set(key: string, data: any, expiry: number = 24 * 60 * 60): Promise<void> {
+  static async set<T>(key: string, data: T, expiry: number = 24 * 60 * 60): Promise<void> {
     await cache.set(this.getKey(key), data, expiry);
   }
 
   static async get<T>(key: string): Promise<T | null> {
-    return cache.get(this.getKey(key));
+    return cache.get<T>(this.getKey(key));
   }
 
   static async del(key: string): Promise<void> {
@@ -163,9 +161,9 @@ export class CacheService {
   }
 
   static generateWatermarkKey(
-    fileHash: string,
-    watermarkText: string,
-    position: string,
+    fileHash: string, 
+    watermarkText: string, 
+    position: string, 
     opacity: number
   ): string {
     return `watermark:${Buffer.from(
@@ -177,7 +175,7 @@ export class CacheService {
     try {
       const testKey = `${this.prefix}health:${Date.now()}`;
       await cache.set(testKey, 'test', 5); // 5 seconds expiry
-      const result = await cache.get(testKey);
+      const result = await cache.get<string>(testKey);
       return result === 'test';
     } catch (error) {
       console.error('[Cache] Health check failed:', error);
@@ -185,7 +183,7 @@ export class CacheService {
     }
   }
 
-  static getStatus(): { using: 'redis' | 'memory', error: string | null } {
+  static getStatus(): { using: 'memory', size: number, maxSize: number, items: number } {
     return cache.getStatus();
   }
 }
