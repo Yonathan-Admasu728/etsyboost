@@ -4,67 +4,64 @@ import { Buffer } from "buffer";
 // Initialize Redis client with fallback to memory cache if Redis is unavailable
 class FallbackCache {
   private memoryCache: Map<string, { data: any; expiry: number }>;
-  private redis: Redis | null;
+  private redis: Redis | null = null; // Initialize as null
   private useMemoryCache: boolean = false;
   private connectionError: string | null = null;
+  private isConnecting: boolean = false;
 
   constructor() {
     this.memoryCache = new Map();
 
+    // Start in memory mode if no Redis URL
     if (!process.env.REDIS_URL) {
       console.log("[Cache] No REDIS_URL provided, using memory cache");
       this.useMemoryCache = true;
-      this.redis = null;
       return;
     }
 
+    this.initRedisConnection();
+  }
+
+  private async initRedisConnection() {
+    if (this.isConnecting) return;
+    this.isConnecting = true;
+
     try {
       console.log("[Cache] Initializing Redis connection...");
-      this.redis = new Redis(process.env.REDIS_URL, {
-        maxRetriesPerRequest: 3,
-        connectTimeout: 5000, // 5 second timeout for initial connection
+      this.redis = new Redis(process.env.REDIS_URL!, {
+        maxRetriesPerRequest: 1,
+        connectTimeout: 3000,
         retryStrategy: (times) => {
-          if (times > 3) {
-            this.connectionError = `Failed to connect to Redis after ${times} attempts`;
-            this.useMemoryCache = true;
-            console.error(`[Cache] ${this.connectionError}, falling back to memory cache`);
+          if (times > 2) {
+            this.switchToMemoryCache(`Failed to connect to Redis after ${times} attempts`);
             return null;
           }
-          const delay = Math.min(times * 1000, 3000);
-          console.log(`[Cache] Retrying Redis connection in ${delay}ms...`);
-          return delay;
-        },
-        reconnectOnError: (err) => {
-          const targetError = "READONLY";
-          if (err.message.includes(targetError)) {
-            return true;
-          }
-          return false;
+          return Math.min(times * 1000, 3000);
         }
       });
 
       this.redis.on('error', (err) => {
-        if (!this.useMemoryCache) {
-          this.connectionError = `Redis error: ${err.message}`;
-          console.error(`[Cache] ${this.connectionError}, switching to memory cache`);
-          this.useMemoryCache = true;
-        }
+        this.switchToMemoryCache(`Redis error: ${err.message}`);
       });
 
       this.redis.on('connect', () => {
         console.log("[Cache] Redis connected successfully");
         this.useMemoryCache = false;
         this.connectionError = null;
+        this.isConnecting = false;
       });
 
-      this.redis.on('reconnecting', () => {
-        console.log("[Cache] Attempting to reconnect to Redis...");
-      });
     } catch (error) {
-      this.connectionError = error instanceof Error ? error.message : "Unknown Redis initialization error";
-      console.error(`[Cache] Failed to initialize Redis: ${this.connectionError}`);
+      this.switchToMemoryCache(error instanceof Error ? error.message : "Unknown Redis initialization error");
+    }
+  }
+
+  private switchToMemoryCache(error: string) {
+    if (!this.useMemoryCache) {
+      this.connectionError = error;
+      console.error(`[Cache] ${error}, switching to memory cache`);
       this.useMemoryCache = true;
-      this.redis = null;
+      this.isConnecting = false;
     }
   }
 
