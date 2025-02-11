@@ -6,44 +6,63 @@ class FallbackCache {
   private memoryCache: Map<string, { data: any; expiry: number }>;
   private redis: Redis | null;
   private useMemoryCache: boolean = false;
+  private connectionError: string | null = null;
 
   constructor() {
     this.memoryCache = new Map();
 
-    if (process.env.REDIS_URL) {
-      try {
-        this.redis = new Redis(process.env.REDIS_URL, {
-          maxRetriesPerRequest: 1,
-          connectTimeout: 2000, // 2 second timeout for initial connection
-          retryStrategy: (times) => {
-            if (times > 1) {
-              this.useMemoryCache = true;
-              console.log("Redis connection failed, using memory cache");
-              return null;
-            }
-            return Math.min(times * 100, 1000);
-          },
-          lazyConnect: true
-        });
+    if (!process.env.REDIS_URL) {
+      console.log("[Cache] No REDIS_URL provided, using memory cache");
+      this.useMemoryCache = true;
+      this.redis = null;
+      return;
+    }
 
-        this.redis.on('error', (err) => {
-          if (!this.useMemoryCache) {
-            console.error("Redis error, switching to memory cache:", err.message);
+    try {
+      console.log("[Cache] Initializing Redis connection...");
+      this.redis = new Redis(process.env.REDIS_URL, {
+        maxRetriesPerRequest: 3,
+        connectTimeout: 5000, // 5 second timeout for initial connection
+        retryStrategy: (times) => {
+          if (times > 3) {
+            this.connectionError = `Failed to connect to Redis after ${times} attempts`;
             this.useMemoryCache = true;
+            console.error(`[Cache] ${this.connectionError}, falling back to memory cache`);
+            return null;
           }
-        });
+          const delay = Math.min(times * 1000, 3000);
+          console.log(`[Cache] Retrying Redis connection in ${delay}ms...`);
+          return delay;
+        },
+        reconnectOnError: (err) => {
+          const targetError = "READONLY";
+          if (err.message.includes(targetError)) {
+            return true;
+          }
+          return false;
+        }
+      });
 
-        this.redis.on('connect', () => {
-          console.log("Redis connected successfully");
-          this.useMemoryCache = false;
-        });
-      } catch (error) {
-        console.error("Failed to initialize Redis:", error);
-        this.useMemoryCache = true;
-        this.redis = null;
-      }
-    } else {
-      console.log("No REDIS_URL provided, using memory cache");
+      this.redis.on('error', (err) => {
+        if (!this.useMemoryCache) {
+          this.connectionError = `Redis error: ${err.message}`;
+          console.error(`[Cache] ${this.connectionError}, switching to memory cache`);
+          this.useMemoryCache = true;
+        }
+      });
+
+      this.redis.on('connect', () => {
+        console.log("[Cache] Redis connected successfully");
+        this.useMemoryCache = false;
+        this.connectionError = null;
+      });
+
+      this.redis.on('reconnecting', () => {
+        console.log("[Cache] Attempting to reconnect to Redis...");
+      });
+    } catch (error) {
+      this.connectionError = error instanceof Error ? error.message : "Unknown Redis initialization error";
+      console.error(`[Cache] Failed to initialize Redis: ${this.connectionError}`);
       this.useMemoryCache = true;
       this.redis = null;
     }
@@ -54,7 +73,9 @@ class FallbackCache {
     try {
       await this.redis.ping();
       return true;
-    } catch {
+    } catch (error) {
+      this.connectionError = error instanceof Error ? error.message : "Redis ping failed";
+      console.error(`[Cache] ${this.connectionError}`);
       this.useMemoryCache = true;
       return false;
     }
@@ -101,6 +122,13 @@ class FallbackCache {
       await this.redis.del(key);
     }
     this.memoryCache.delete(key);
+  }
+
+  getStatus(): { using: 'redis' | 'memory', error: string | null } {
+    return {
+      using: this.useMemoryCache ? 'memory' : 'redis',
+      error: this.connectionError
+    };
   }
 }
 
@@ -158,5 +186,9 @@ export class CacheService {
       console.error('[Cache] Health check failed:', error);
       return false;
     }
+  }
+
+  static getStatus(): { using: 'redis' | 'memory', error: string | null } {
+    return cache.getStatus();
   }
 }

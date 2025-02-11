@@ -32,6 +32,15 @@ export function WatermarkTool() {
   });
 
   const onSubmit = async (data: WatermarkRequest) => {
+    if (!data.file) {
+      toast({
+        title: "Error",
+        description: "Please select a file to watermark",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsUploading(true);
     try {
       const formData = new FormData();
@@ -46,7 +55,8 @@ export function WatermarkTool() {
       });
 
       if (!response.ok) {
-        throw new Error("Failed to process watermark");
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to process watermark");
       }
 
       const result = await response.blob();
@@ -58,9 +68,10 @@ export function WatermarkTool() {
         description: "Your watermarked file is ready to download.",
       });
     } catch (error) {
+      console.error("Watermark error:", error);
       toast({
         title: "Error",
-        description: "Failed to create watermark. Please try again.",
+        description: error instanceof Error ? error.message : "Failed to create watermark. Please try again.",
         variant: "destructive",
       });
     } finally {
