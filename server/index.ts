@@ -5,9 +5,23 @@ import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import session from "express-session";
 import MemoryStore from "memorystore";
+import crypto from 'crypto';
+import net from 'net';  // Add explicit net import
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+// Try alternate ports if 3000 is in use
+const findAvailablePort = async (startPort: number): Promise<number> => {
+  return new Promise((resolve) => {
+    const server = net.createServer();
+    server.listen(startPort, '0.0.0.0', () => {
+      const { port } = server.address() as net.AddressInfo;
+      server.close(() => resolve(port));
+    });
+    server.on('error', () => {
+      resolve(findAvailablePort(startPort + 1));
+    });
+  });
+};
 
 // Trust proxy - required for rate limiting and proper IP detection behind Replit proxy
 app.set('trust proxy', '2');  // Set to 2 to handle Replit's proxy setup
@@ -71,13 +85,14 @@ const sessionStore = new MemoryStoreSession({
 
 app.use(session({
   store: sessionStore,
-  secret: process.env.SESSION_SECRET || 'your-secret-key',
+  secret: process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex'),
   resave: false,
   saveUninitialized: false,
   cookie: {
     secure: app.get('env') === 'production',
     maxAge: 24 * 60 * 60 * 1000, // 24 hours
-    sameSite: 'lax'
+    sameSite: 'lax',
+    httpOnly: true // Adding httpOnly flag for security
   }
 }));
 
@@ -152,7 +167,13 @@ app.use((req, res, next) => {
     serveStatic(app);
   }
 
-  server.listen(Number(PORT), "0.0.0.0", () => {
-    log(`Server running in ${app.get("env")} mode on port ${PORT}`);
-  });
+  try {
+    const port = await findAvailablePort(Number(process.env.PORT) || 3000);
+    server.listen(port, "0.0.0.0", () => {
+      log(`Server running in ${app.get("env")} mode on port ${port}`);
+    });
+  } catch (error) {
+    console.error('Failed to start server:', error);
+    process.exit(1);
+  }
 })();
